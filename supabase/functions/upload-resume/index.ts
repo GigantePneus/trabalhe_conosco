@@ -14,16 +14,14 @@ serve(async (req) => {
     }
 
     try {
-        const reqData = await req.json().catch(() => null);  // Tenta ler JSON primeiro (para delete)
+        const contentType = req.headers.get('content-type') || '';
+        let reqData = null;
         let formData = null;
 
-        // Se não for JSON, tenta ler FormData (para upload)
-        if (!reqData) {
-            try {
-                formData = await req.formData();
-            } catch (e) {
-                // Ignore
-            }
+        if (contentType.includes('application/json')) {
+            reqData = await req.json();
+        } else if (contentType.includes('multipart/form-data')) {
+            formData = await req.formData();
         }
 
         // Get Apps Script URL from secrets

@@ -93,21 +93,21 @@ const CandidatesList: React.FC<{ user: AdminUser, onLogout: () => void, theme?: 
                     </p>
                   </td>
                   <td className="px-8 py-5">
-                      <span className="text-sm font-semibold text-slate-700 dark:text-slate-200">
-                        {(() => {
-                          const date = new Date(c.created_at || Date.now());
-                          date.setHours(date.getHours() - 3); // Ajuste manual para UTC-3 (Brasília)
-                          return date.toLocaleDateString('pt-BR');
-                        })()}
-                      </span>
-                      <span className="text-[11px] text-slate-400">
-                        {(() => {
-                          const date = new Date(c.created_at || Date.now());
-                          date.setHours(date.getHours() - 3); // Ajuste manual para UTC-3 (Brasília)
-                          return date.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
-                        })()}
-                      </span>
-                    </div>
+                    <span className="text-sm font-semibold text-slate-700 dark:text-slate-200">
+                      {(() => {
+                        const date = new Date(c.created_at || Date.now());
+                        date.setHours(date.getHours() - 3); // Ajuste manual para UTC-3 (Brasília)
+                        return date.toLocaleDateString('pt-BR');
+                      })()}
+                    </span>
+                    <span className="text-[11px] text-slate-400">
+                      {(() => {
+                        const date = new Date(c.created_at || Date.now());
+                        date.setHours(date.getHours() - 3); // Ajuste manual para UTC-3 (Brasília)
+                        return date.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
+                      })()}
+                    </span>
+
                   </td>
                   <td className="px-8 py-5 text-center">
                     {getStatusBadge(c.status)}
@@ -151,54 +151,54 @@ const CandidatesList: React.FC<{ user: AdminUser, onLogout: () => void, theme?: 
                   </td>
                 </tr>
               ))}
-          </tbody>
-        </table>
-    </div>
+            </tbody>
+          </table>
+        </div>
 
-        {/* Modal Clean */ }
-  {
-    selected && (
-      <div className="fixed inset-0 z-[100] flex items-center justify-center p-6 bg-slate-900/40 backdrop-blur-sm animate-fade-in">
-        <div className="bg-white dark:bg-zinc-900 w-full max-w-xl rounded-3xl shadow-2xl overflow-hidden border border-white/20">
-          <div className="p-8 border-b border-slate-50 dark:border-white/5 flex justify-between items-center">
-            <div className="flex items-center gap-4">
-              <div className="w-12 h-12 rounded-2xl bg-gigante-red/5 text-gigante-red flex items-center justify-center">
-                <User size={24} />
-              </div>
-              <div>
-                <h2 className="text-lg font-bold text-slate-900 dark:text-white">{selected.nome}</h2>
-                <div className="flex gap-4 mt-1">
-                  <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest flex items-center gap-1">
-                    <MapPin size={12} /> {selected.cidade_loja?.nome_loja}
-                  </span>
+        {/* Modal Clean */}
+        {
+          selected && (
+            <div className="fixed inset-0 z-[100] flex items-center justify-center p-6 bg-slate-900/40 backdrop-blur-sm animate-fade-in">
+              <div className="bg-white dark:bg-zinc-900 w-full max-w-xl rounded-3xl shadow-2xl overflow-hidden border border-white/20">
+                <div className="p-8 border-b border-slate-50 dark:border-white/5 flex justify-between items-center">
+                  <div className="flex items-center gap-4">
+                    <div className="w-12 h-12 rounded-2xl bg-gigante-red/5 text-gigante-red flex items-center justify-center">
+                      <User size={24} />
+                    </div>
+                    <div>
+                      <h2 className="text-lg font-bold text-slate-900 dark:text-white">{selected.nome}</h2>
+                      <div className="flex gap-4 mt-1">
+                        <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest flex items-center gap-1">
+                          <MapPin size={12} /> {selected.cidade_loja?.nome_loja}
+                        </span>
+                      </div>
+                    </div>
+                  </div>
+                  <button onClick={() => setSelected(null)} className="p-2 text-slate-400 hover:bg-slate-50 dark:hover:bg-white/5 rounded-full transition-all">
+                    <X size={20} />
+                  </button>
+                </div>
+                <div className="p-10 space-y-8">
+                  <div className="space-y-3">
+                    <h4 className="text-[11px] font-bold text-slate-400 uppercase tracking-widest">Sobre o Candidato</h4>
+                    <p className="text-sm text-slate-600 dark:text-slate-400 leading-relaxed bg-slate-50 dark:bg-white/5 p-6 rounded-2xl italic">
+                      "{selected.apresentacao}"
+                    </p>
+                  </div>
+
+                  <div className="flex gap-4 pt-4">
+                    <button className="flex-grow bg-gigante-red text-white py-4 px-6 rounded-2xl font-bold text-sm hover:opacity-90 transition-all shadow-lg flex items-center justify-center gap-2">
+                      Aceitar Perfil <ChevronRight size={18} />
+                    </button>
+                    <button className="flex-grow bg-slate-100 dark:bg-white/5 text-slate-700 dark:text-slate-300 py-4 px-6 rounded-2xl font-bold text-sm hover:bg-slate-200 dark:hover:bg-white/10 transition-all">
+                      Descartar
+                    </button>
+                  </div>
                 </div>
               </div>
             </div>
-            <button onClick={() => setSelected(null)} className="p-2 text-slate-400 hover:bg-slate-50 dark:hover:bg-white/5 rounded-full transition-all">
-              <X size={20} />
-            </button>
-          </div>
-          <div className="p-10 space-y-8">
-            <div className="space-y-3">
-              <h4 className="text-[11px] font-bold text-slate-400 uppercase tracking-widest">Sobre o Candidato</h4>
-              <p className="text-sm text-slate-600 dark:text-slate-400 leading-relaxed bg-slate-50 dark:bg-white/5 p-6 rounded-2xl italic">
-                "{selected.apresentacao}"
-              </p>
-            </div>
-
-            <div className="flex gap-4 pt-4">
-              <button className="flex-grow bg-gigante-red text-white py-4 px-6 rounded-2xl font-bold text-sm hover:opacity-90 transition-all shadow-lg flex items-center justify-center gap-2">
-                Aceitar Perfil <ChevronRight size={18} />
-              </button>
-              <button className="flex-grow bg-slate-100 dark:bg-white/5 text-slate-700 dark:text-slate-300 py-4 px-6 rounded-2xl font-bold text-sm hover:bg-slate-200 dark:hover:bg-white/10 transition-all">
-                Descartar
-              </button>
-            </div>
-          </div>
-        </div>
-      </div>
-    )
-  }
+          )
+        }
       </main >
     </div >
   );
