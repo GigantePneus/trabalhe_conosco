@@ -15,37 +15,39 @@ const LandingPage: React.FC<LandingPageProps> = ({ theme, onToggleTheme }) => {
     <Layout theme={theme} onToggleTheme={onToggleTheme}>
       {/* Hero Section Clean */}
       <section className="relative min-h-[80vh] flex items-center bg-white dark:bg-zinc-950 overflow-hidden">
-        <div className="absolute top-0 right-0 w-1/2 h-full hidden lg:block">
-           <div className="absolute inset-0 bg-gradient-to-r from-white dark:from-zinc-950 to-transparent z-10"></div>
-           <img 
-              src="/hero-bg.jpg" 
-              className="w-full h-full object-cover grayscale opacity-10 dark:opacity-5"
-              alt="Background"
-           />
+        {/* Background Image - Left Side */}
+        <div className="absolute top-0 left-0 w-1/2 h-full hidden lg:block">
+          <div className="absolute inset-0 bg-gradient-to-r from-transparent to-white dark:to-zinc-950 z-10"></div>
+          <img
+            src="/hero-bg.jpg"
+            className="w-full h-full object-cover grayscale opacity-20 dark:opacity-10"
+            alt="Background View"
+          />
         </div>
 
         <div className="container mx-auto px-6 relative z-20">
-          <div className="max-w-2xl animate-fade-in">
+          {/* Content - Pushed to Right */}
+          <div className="max-w-2xl ml-auto animate-fade-in lg:pl-10">
             <div className="inline-flex items-center gap-2 bg-red-50 dark:bg-red-500/10 text-gigante-red px-4 py-1.5 rounded-full text-xs font-bold mb-8">
-               <span className="w-1.5 h-1.5 rounded-full bg-gigante-red animate-pulse"></span>
-               RECRUTAMENTO ABERTO
+              <span className="w-1.5 h-1.5 rounded-full bg-gigante-red animate-pulse"></span>
+              RECRUTAMENTO ABERTO
             </div>
             <h1 className="text-5xl md:text-7xl font-extrabold text-slate-900 dark:text-white mb-6 leading-[1.1] tracking-tight">
-              Faça parte do time <br/><span className="text-gigante-red italic">Gigante Pneus</span>
+              Faça parte do time <br /><span className="text-gigante-red italic">Gigante Pneus</span>
             </h1>
             <p className="text-lg text-slate-500 dark:text-slate-400 mb-10 leading-relaxed max-w-lg">
               Construa sua carreira em uma das maiores redes automotivas do Brasil. Buscamos talentos que queiram crescer e fazer a diferença.
             </p>
             <div className="flex flex-wrap gap-4">
-              <Link 
-                to="/candidatar" 
+              <Link
+                to="/candidatar"
                 className="bg-slate-900 dark:bg-white text-white dark:text-slate-900 px-8 py-4 rounded-2xl font-bold text-lg hover:bg-gigante-red hover:text-white transition-all shadow-xl flex items-center gap-3"
               >
                 Quero me candidatar
                 <ArrowRight size={20} />
               </Link>
-              <a 
-                href="#quem-somos" 
+              <a
+                href="#quem-somos"
                 className="bg-white dark:bg-zinc-900 text-slate-600 dark:text-slate-300 border border-slate-200 dark:border-white/10 px-8 py-4 rounded-2xl font-bold text-lg hover:border-gigante-red hover:text-gigante-red transition-all"
               >
                 Saiba Mais
@@ -62,7 +64,7 @@ const LandingPage: React.FC<LandingPageProps> = ({ theme, onToggleTheme }) => {
             <div className="order-2 md:order-1">
               <h2 className="text-[11px] font-bold text-gigante-red uppercase tracking-[0.3em] mb-4">Institucional</h2>
               <h3 className="text-3xl md:text-4xl font-extrabold text-slate-900 dark:text-white mb-8 leading-tight">
-                Uma trajetória de <br/>excelência e confiança.
+                Uma trajetória de <br />excelência e confiança.
               </h3>
               <div className="space-y-6 text-slate-600 dark:text-slate-400 text-lg leading-relaxed">
                 <p>
@@ -74,13 +76,13 @@ const LandingPage: React.FC<LandingPageProps> = ({ theme, onToggleTheme }) => {
               </div>
             </div>
             <div className="order-1 md:order-2 relative">
-               <div className="w-full aspect-square rounded-3xl overflow-hidden shadow-2xl">
-                  <img src="https://images.unsplash.com/photo-1486006396113-ad7301fd0419?auto=format&fit=crop&q=80&w=1000" className="w-full h-full object-cover grayscale" alt="Equipe" />
-               </div>
-               <div className="absolute -bottom-8 -left-8 bg-white dark:bg-zinc-800 p-8 rounded-3xl shadow-premium border border-slate-100 dark:border-white/5">
-                  <div className="text-4xl font-black text-gigante-red">+50</div>
-                  <div className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mt-1">Lojas no Brasil</div>
-               </div>
+              <div className="w-full aspect-square rounded-3xl overflow-hidden shadow-2xl">
+                <img src="http://academia.gigantepneus.com.br/wp-content/uploads/2026/01/image-3.jpg" className="w-full h-full object-cover grayscale" alt="Equipe" />
+              </div>
+              <div className="absolute -bottom-8 -left-8 bg-white dark:bg-zinc-800 p-8 rounded-3xl shadow-premium border border-slate-100 dark:border-white/5">
+                <div className="text-4xl font-black text-gigante-red">+15</div>
+                <div className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mt-1">Lojas no Brasil</div>
+              </div>
             </div>
           </div>
         </div>
@@ -93,7 +95,7 @@ const LandingPage: React.FC<LandingPageProps> = ({ theme, onToggleTheme }) => {
             <h2 className="text-3xl font-extrabold text-slate-900 dark:text-white mb-4">Por que trabalhar conosco?</h2>
             <p className="text-slate-500 dark:text-slate-400">Oferecemos benefícios e um ambiente que valoriza cada passo da sua carreira.</p>
           </div>
-          
+
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
             {ADVANTAGES.map((adv, idx) => (
               <div key={idx} className="p-8 bg-slate-50 dark:bg-white/5 rounded-3xl border border-slate-100 dark:border-white/5 hover:border-gigante-red/30 transition-all group">
@@ -121,10 +123,10 @@ const LandingPage: React.FC<LandingPageProps> = ({ theme, onToggleTheme }) => {
                 </div>
               ))}
             </div>
-            
+
             <div className="mt-20 text-center">
-              <Link 
-                to="/candidatar" 
+              <Link
+                to="/candidatar"
                 className="inline-flex items-center gap-4 bg-gigante-red text-white px-12 py-5 rounded-2xl font-bold text-xl hover:opacity-90 transition-all shadow-xl shadow-red-500/20 uppercase"
               >
                 Enviar meu currículo agora
