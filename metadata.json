@@ -1,0 +1,8 @@
+
+{
+  "name": "Trabalhe Conosco – Gigante Pneus",
+  "description": "Sistema centralizado de recrutamento e seleção para a rede Gigante Pneus, com gestão de currículos, dashboard administrativo e integração com Google Drive.",
+  "requestFramePermissions": [
+    "camera"
+  ]
+}
