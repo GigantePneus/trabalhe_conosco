@@ -110,26 +110,26 @@ const ApplicationForm: React.FC<{ theme?: 'light' | 'dark', onToggleTheme?: () =
               <form onSubmit={handleSubmit} className="space-y-8">
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                   <div className="space-y-2">
-                    <label className="text-[10px] font-black uppercase tracking-widest text-gray-400">Nome Completo</label>
-                    <input required type="text" name="nome" value={formData.nome} onChange={handleInputChange} className="w-full px-5 py-4 bg-gray-50 border-2 border-transparent focus:border-black outline-none transition-all dark:bg-black dark:text-white" placeholder="Ex: Alex Ignacio" />
+                    <label className="text-[10px] font-black uppercase tracking-widest text-gray-400 dark:text-gray-300">Nome Completo</label>
+                    <input required type="text" name="nome" value={formData.nome} onChange={handleInputChange} className="w-full px-5 py-4 bg-gray-50 border-2 border-transparent focus:border-black outline-none transition-all dark:bg-zinc-900 dark:text-white dark:border-white/10 dark:focus:border-gigante-red placeholder:text-gray-400 dark:placeholder:text-gray-500" placeholder="Ex: Alex Ignacio" />
                   </div>
                   <div className="space-y-2">
-                    <label className="text-[10px] font-black uppercase tracking-widest text-gray-400">WhatsApp</label>
-                    <input required type="tel" name="telefone" value={formData.telefone} onChange={handleInputChange} className="w-full px-5 py-4 bg-gray-50 border-2 border-transparent focus:border-black outline-none transition-all dark:bg-black dark:text-white" placeholder="(00) 00000-0000" />
+                    <label className="text-[10px] font-black uppercase tracking-widest text-gray-400 dark:text-gray-300">WhatsApp</label>
+                    <input required type="tel" name="telefone" value={formData.telefone} onChange={handleInputChange} className="w-full px-5 py-4 bg-gray-50 border-2 border-transparent focus:border-black outline-none transition-all dark:bg-zinc-900 dark:text-white dark:border-white/10 dark:focus:border-gigante-red placeholder:text-gray-400 dark:placeholder:text-gray-500" placeholder="(00) 00000-0000" />
                   </div>
                 </div>
 
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                   <div className="space-y-2">
-                    <label className="text-[10px] font-black uppercase tracking-widest text-gray-400">Unidade Desejada</label>
-                    <select required name="cidade_loja_id" value={formData.cidade_loja_id} onChange={handleInputChange} className="w-full px-5 py-4 bg-gray-50 border-2 border-transparent focus:border-black outline-none dark:bg-black dark:text-white">
+                    <label className="text-[10px] font-black uppercase tracking-widest text-gray-400 dark:text-gray-300">Unidade Desejada</label>
+                    <select required name="cidade_loja_id" value={formData.cidade_loja_id} onChange={handleInputChange} className="w-full px-5 py-4 bg-gray-50 border-2 border-transparent focus:border-black outline-none dark:bg-zinc-900 dark:text-white dark:border-white/10 dark:focus:border-gigante-red">
                       <option value="">Selecione a Loja</option>
                       {stores.map(s => <option key={s.id} value={s.id}>{s.nome_loja}</option>)}
                     </select>
                   </div>
                   <div className="space-y-2">
-                    <label className="text-[10px] font-black uppercase tracking-widest text-gray-400">Cargo Pretendido</label>
-                    <select required name="cargo_id" value={formData.cargo_id} onChange={handleInputChange} className="w-full px-5 py-4 bg-gray-50 border-2 border-transparent focus:border-black outline-none dark:bg-black dark:text-white">
+                    <label className="text-[10px] font-black uppercase tracking-widest text-gray-400 dark:text-gray-300">Cargo Pretendido</label>
+                    <select required name="cargo_id" value={formData.cargo_id} onChange={handleInputChange} className="w-full px-5 py-4 bg-gray-50 border-2 border-transparent focus:border-black outline-none dark:bg-zinc-900 dark:text-white dark:border-white/10 dark:focus:border-gigante-red">
                       <option value="">Selecione o Cargo</option>
                       {roles.map(r => <option key={r.id} value={r.id}>{r.nome}</option>)}
                     </select>
@@ -137,8 +137,8 @@ const ApplicationForm: React.FC<{ theme?: 'light' | 'dark', onToggleTheme?: () =
                 </div>
 
                 <div className="space-y-2">
-                  <label className="text-[10px] font-black uppercase tracking-widest text-gray-400">Apresentação</label>
-                  <textarea required name="apresentacao" value={formData.apresentacao} onChange={handleInputChange} rows={4} className="w-full px-5 py-4 bg-gray-50 border-2 border-transparent focus:border-black outline-none transition-all resize-none dark:bg-black dark:text-white" placeholder="Conte sua experiência..." />
+                  <label className="text-[10px] font-black uppercase tracking-widest text-gray-400 dark:text-gray-300">Apresentação</label>
+                  <textarea required name="apresentacao" value={formData.apresentacao} onChange={handleInputChange} rows={4} className="w-full px-5 py-4 bg-gray-50 border-2 border-transparent focus:border-black outline-none transition-all resize-none dark:bg-zinc-900 dark:text-white dark:border-white/10 dark:focus:border-gigante-red placeholder:text-gray-400 dark:placeholder:text-gray-500" placeholder="Conte sua experiência..." />
                 </div>
 
                 <div className="space-y-2">
