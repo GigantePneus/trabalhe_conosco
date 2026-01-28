@@ -51,7 +51,15 @@ export const driveService = {
           fileName: file.name
         };
       } catch (err: any) {
-        console.error('📁 [DriveService] Erro ao usar Edge Function:', err);
+        console.error('� [DriveService FATAL] Erro ao usar Edge Function:', err);
+        console.error('Nome do erro:', err.name);
+        console.error('Mensagem:', err.message);
+
+        // Verifica se é erro de rede/CORS
+        if (err.message === 'Failed to fetch') {
+          console.error('⚠️ Provável erro de CORS ou Bloqueio de Rede (AdBlock/Firewall)');
+        }
+
         console.warn('📁 [DriveService] Usando MOCK FALLBACK devido ao erro...');
 
         // Fallback para MOCK se a Edge Function falhar
