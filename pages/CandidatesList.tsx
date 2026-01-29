@@ -3,7 +3,8 @@ import React, { useState, useEffect } from 'react';
 import AdminSidebar from '../components/AdminSidebar';
 import { supabaseService } from '../services/supabase';
 import { Candidate, CandidateStatus, AdminUser } from '../types';
-import { Search, Download, ExternalLink, Phone, Briefcase, Eye, X, MapPin, ChevronRight, User, Trash2, LayoutGrid, List as ListIcon, Mail, Store } from 'lucide-react';
+import { Search, Download, ExternalLink, Phone, Briefcase, Eye, X, MapPin, ChevronRight, User, Trash2, LayoutGrid, List as ListIcon, Mail, Store as StoreIcon, Filter, ChevronDown, Calendar } from 'lucide-react';
+import { Store, JobRole } from '../types';
 
 const CandidatesList: React.FC<{ user: AdminUser, onLogout: () => void, theme?: 'light' | 'dark', onToggleTheme?: () => void }> = ({ user, onLogout, theme, onToggleTheme }) => {
   const [candidates, setCandidates] = useState<Candidate[]>([]);
@@ -11,9 +12,25 @@ const CandidatesList: React.FC<{ user: AdminUser, onLogout: () => void, theme?: 
   const [selected, setSelected] = useState<Candidate | null>(null);
   const [searchTerm, setSearchTerm] = useState('');
   const [viewMode, setViewMode] = useState<'grid' | 'list'>('list');
+  const [stores, setStores] = useState<Store[]>([]);
+  const [roles, setRoles] = useState<JobRole[]>([]);
+  const [filters, setFilters] = useState({
+    storeId: '',
+    roleId: '',
+    status: ''
+  });
 
   useEffect(() => {
-    supabaseService.getCandidates(undefined, user).then(c => { setCandidates(c); setLoading(false); });
+    Promise.all([
+      supabaseService.getCandidates(undefined, user),
+      supabaseService.getStores(user),
+      supabaseService.getRoles(user)
+    ]).then(([c, s, r]) => {
+      setCandidates(c);
+      setStores(s);
+      setRoles(r);
+      setLoading(false);
+    });
   }, [user]);
 
   const getStatusBadge = (s: CandidateStatus) => {
@@ -31,7 +48,15 @@ const CandidatesList: React.FC<{ user: AdminUser, onLogout: () => void, theme?: 
     );
   };
 
-  const filtered = candidates.filter(c => c.nome.toLowerCase().includes(searchTerm.toLowerCase()));
+  const filtered = candidates.filter(c => {
+    const matchesSearch = c.nome.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      c.email.toLowerCase().includes(searchTerm.toLowerCase());
+    const matchesStore = filters.storeId ? c.cidade_loja_id === filters.storeId : true;
+    const matchesRole = filters.roleId ? c.cargo_id === filters.roleId : true;
+    const matchesStatus = filters.status ? c.status === filters.status : true;
+
+    return matchesSearch && matchesStore && matchesRole && matchesStatus;
+  });
 
   return (
     <div className="flex bg-[#F8F9FA] dark:bg-zinc-950 min-h-screen">
@@ -77,6 +102,66 @@ const CandidatesList: React.FC<{ user: AdminUser, onLogout: () => void, theme?: 
           </div>
         </header>
 
+        {/* Filters Section */}
+        <section className="bg-white dark:bg-zinc-900 p-6 rounded-2xl shadow-premium border border-slate-100 dark:border-white/5 mb-8 flex flex-wrap items-end gap-6">
+          <div className="flex-grow min-w-[200px] space-y-1.5">
+            <label className="text-[11px] font-bold text-slate-400 uppercase tracking-wider ml-1">Unidade</label>
+            <div className="relative">
+              <select
+                value={filters.storeId}
+                onChange={e => setFilters(f => ({ ...f, storeId: e.target.value }))}
+                className="w-full bg-slate-50 dark:bg-zinc-800 border-none rounded-lg px-4 py-2.5 text-xs font-semibold appearance-none focus:ring-2 focus:ring-gigante-red/20 outline-none dark:text-white"
+              >
+                <option value="">Todas as Unidades</option>
+                {stores.map(s => <option key={s.id} value={s.id}>{s.nome_loja}</option>)}
+              </select>
+              <ChevronDown className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" size={14} />
+            </div>
+          </div>
+
+          <div className="flex-grow min-w-[200px] space-y-1.5">
+            <label className="text-[11px] font-bold text-slate-400 uppercase tracking-wider ml-1">Função</label>
+            <div className="relative">
+              <select
+                value={filters.roleId}
+                onChange={e => setFilters(f => ({ ...f, roleId: e.target.value }))}
+                className="w-full bg-slate-50 dark:bg-zinc-800 border-none rounded-lg px-4 py-2.5 text-xs font-semibold appearance-none focus:ring-2 focus:ring-gigante-red/20 outline-none dark:text-white"
+              >
+                <option value="">Todas as Funções</option>
+                {roles.map(r => <option key={r.id} value={r.id}>{r.nome}</option>)}
+              </select>
+              <ChevronDown className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" size={14} />
+            </div>
+          </div>
+
+          <div className="flex-grow min-w-[200px] space-y-1.5">
+            <label className="text-[11px] font-bold text-slate-400 uppercase tracking-wider ml-1">Status</label>
+            <div className="relative">
+              <select
+                value={filters.status}
+                onChange={e => setFilters(f => ({ ...f, status: e.target.value }))}
+                className="w-full bg-slate-50 dark:bg-zinc-800 border-none rounded-lg px-4 py-2.5 text-xs font-semibold appearance-none focus:ring-2 focus:ring-gigante-red/20 outline-none dark:text-white"
+              >
+                <option value="">Todos os Status</option>
+                <option value="novo">Novo</option>
+                <option value="em análise">Em Análise</option>
+                <option value="aprovado">Aprovado</option>
+                <option value="visualizado">Visualizado</option>
+                <option value="descartado">Descartado</option>
+              </select>
+              <ChevronDown className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" size={14} />
+            </div>
+          </div>
+
+          <button
+            onClick={() => setFilters({ storeId: '', roleId: '', status: '' })}
+            className="p-3 text-slate-400 hover:text-gigante-red hover:bg-red-50 dark:hover:bg-red-900/10 rounded-lg transition-all"
+            title="Limpar Filtros"
+          >
+            <X size={20} />
+          </button>
+        </section>
+
         {loading ? (
           <div className="flex flex-col items-center justify-center py-20 gap-4">
             <div className="animate-spin rounded-full h-10 w-10 border-4 border-gigante-red/20 border-t-gigante-red"></div>
@@ -100,7 +185,7 @@ const CandidatesList: React.FC<{ user: AdminUser, onLogout: () => void, theme?: 
 
                 <div className="space-y-4 pt-6 border-t border-slate-50 dark:border-white/5">
                   <div className="flex items-center gap-3 text-xs font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider">
-                    <Store size={14} className="text-gigante-red" /> {c.cidade_loja?.nome_loja}
+                    <StoreIcon size={14} className="text-gigante-red" /> {c.cidade_loja?.nome_loja}
                   </div>
                   <div className="flex items-center gap-3 text-xs font-black text-slate-900 dark:text-white uppercase tracking-wider">
                     <Briefcase size={14} className="text-gigante-red" /> {c.cargo?.nome}
