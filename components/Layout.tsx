@@ -81,10 +81,10 @@ const Layout: React.FC<LayoutProps> = ({ children, theme, onToggleTheme }) => {
               <div>
                 <h4 className="font-bold text-[11px] uppercase tracking-[0.3em] text-slate-900 dark:text-white mb-8">Redes Sociais</h4>
                 <div className="flex gap-4">
-                  <a href="#" className="w-10 h-10 rounded-xl bg-slate-50 dark:bg-white/5 flex items-center justify-center hover:bg-gigante-red hover:text-white transition-all text-slate-400">
+                  <a href="https://www.instagram.com/gigantepneus" target="_blank" rel="noopener noreferrer" className="w-10 h-10 rounded-xl bg-slate-50 dark:bg-white/5 flex items-center justify-center hover:bg-gigante-red hover:text-white transition-all text-slate-400">
                     <Instagram size={20} />
                   </a>
-                  <a href="#" className="w-10 h-10 rounded-xl bg-slate-50 dark:bg-white/5 flex items-center justify-center hover:bg-gigante-red hover:text-white transition-all text-slate-400">
+                  <a href="https://www.facebook.com/gigantepneusfranquia/" target="_blank" rel="noopener noreferrer" className="w-10 h-10 rounded-xl bg-slate-50 dark:bg-white/5 flex items-center justify-center hover:bg-gigante-red hover:text-white transition-all text-slate-400">
                     <Facebook size={20} />
                   </a>
                 </div>

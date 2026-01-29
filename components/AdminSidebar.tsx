@@ -52,8 +52,8 @@ const AdminSidebar: React.FC<AdminSidebarProps> = ({ user, onLogout, theme, onTo
                 key={item.path}
                 to={item.path}
                 className={`flex items-center justify-between p-3.5 rounded-xl transition-all group ${isActive
-                    ? 'bg-gigante-red text-white shadow-lg shadow-red-500/20'
-                    : 'text-slate-400 hover:text-slate-900 dark:hover:text-white hover:bg-slate-50 dark:hover:bg-white/5'
+                  ? 'bg-gigante-red text-white shadow-lg shadow-red-500/20'
+                  : 'text-slate-400 hover:text-slate-900 dark:hover:text-white hover:bg-slate-50 dark:hover:bg-white/5'
                   }`}
               >
                 <div className="flex items-center gap-3">
