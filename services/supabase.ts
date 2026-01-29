@@ -28,9 +28,17 @@ let MOCK_CANDIDATES: Candidate[] = [];
 
 export const supabaseService = {
   // --- LOJAS ---
-  getStores: async (): Promise<Store[]> => {
+  getStores: async (currentUser?: AdminUser): Promise<Store[]> => {
     if (supabase) {
-      const { data, error } = await supabase.from('stores').select('*').eq('ativo', true);
+      let query = supabase.from('stores').select('*').eq('ativo', true).order('nome_loja');
+
+      if (currentUser?.role === 'franqueado') {
+        const allowed = currentUser.lojas_permitidas || [];
+        if (allowed.length > 0) query = query.in('id', allowed);
+        else return [];
+      }
+
+      const { data, error } = await query;
       if (!error && data) return data;
     }
     return MOCK_STORES; // Fallback
@@ -70,9 +78,17 @@ export const supabaseService = {
   },
 
   // --- CARGOS ---
-  getRoles: async (): Promise<JobRole[]> => {
+  getRoles: async (currentUser?: AdminUser): Promise<JobRole[]> => {
     if (supabase) {
-      const { data, error } = await supabase.from('job_roles').select('*').eq('ativo', true);
+      let query = supabase.from('job_roles').select('*').eq('ativo', true).order('nome');
+
+      if (currentUser?.role === 'franqueado') {
+        const allowed = currentUser.cargos_permitidos || [];
+        if (allowed.length > 0) query = query.in('id', allowed);
+        else return [];
+      }
+
+      const { data, error } = await query;
       if (!error && data) return data;
     }
     return MOCK_ROLES;
@@ -128,9 +144,31 @@ export const supabaseService = {
     return newCandidate;
   },
 
-  getCandidates: async (filters?: { storeId?: string, roleId?: string, status?: string, search?: string }) => {
+  getCandidates: async (filters?: { storeId?: string, roleId?: string, status?: string, search?: string }, currentUser?: AdminUser) => {
     if (supabase) {
       let query = supabase.from('candidates').select('*, cidade_loja:stores(*), cargo:job_roles(*)');
+
+      let allowedStores: string[] = [];
+      let allowedRoles: string[] = [];
+
+      // Restrição de Acesso (Franqueado)
+      if (currentUser?.role === 'franqueado') {
+        allowedStores = currentUser.lojas_permitidas || [];
+        allowedRoles = currentUser.cargos_permitidos || [];
+
+        console.log("--- DEBUG CANDIDATES ACCESS ---");
+        console.log("User:", currentUser.email);
+        console.log("Allowed Stores:", JSON.stringify(allowedStores));
+        console.log("Allowed Roles:", JSON.stringify(allowedRoles));
+
+        if (allowedStores.length > 0) query = query.in('cidade_loja_id', allowedStores);
+        if (allowedRoles.length > 0) query = query.in('cargo_id', allowedRoles);
+
+        if (allowedStores.length === 0 && allowedRoles.length === 0) {
+          console.warn("CRITICAL: USER HAS NO PERMISSIONS ASSIGNED!");
+          return [];
+        }
+      }
 
       if (filters?.storeId) query = query.eq('cidade_loja_id', filters.storeId);
       if (filters?.roleId) query = query.eq('cargo_id', filters.roleId);
@@ -138,6 +176,44 @@ export const supabaseService = {
       if (filters?.search) query = query.ilike('nome', `%${filters.search}%`);
 
       const { data, error } = await query;
+
+      // Relatório Forense (sempre roda para Frankeados para comparação)
+      let forensicData: any[] = [];
+      let totalCount = 0;
+      let allStores: any[] = [];
+      let allRoles: any[] = [];
+
+      if (currentUser?.role === 'franqueado' && !error) {
+        const { data: forensicItems, count } = await supabase.from('candidates').select('nome, cidade_loja_id, cargo_id, stores:stores(nome_loja), cargo:job_roles(nome)', { count: 'exact' });
+        const { data: storesDB } = await supabase.from('stores').select('id, nome_loja');
+        const { data: rolesDB } = await supabase.from('job_roles').select('id, nome');
+
+        allStores = storesDB || [];
+        allRoles = rolesDB || [];
+        totalCount = count || 0;
+
+        forensicData = forensicItems?.map(x => ({
+          candidato: x.nome,
+          loja: (x as any).stores?.nome_loja || "NÃO ENCONTRADA",
+          'Loja OK?': allowedStores.includes(x.cidade_loja_id || ''),
+          cargo: (x as any).cargo?.nome || "NÃO ENCONTRADO",
+          'Cargo OK?': allowedRoles.includes(x.cargo_id || '')
+        })) || [];
+
+        console.log("--- RELATÓRIO DE VISIBILIDADE ---");
+        console.log(`Itens visíveis para você: ${data?.length || 0}`);
+        console.log(`Total de currículos no banco: ${totalCount}`);
+
+        if (forensicData.length > 0) console.table(forensicData);
+
+        console.log("--- TABELA DE REFERÊNCIA (BANCO) ---", {
+          todas_as_lojas: allStores,
+          todos_os_cargos: allRoles,
+          seus_filtros: { lojas: allowedStores, cargos: allowedRoles },
+          erro_supabase: error?.message || 'Nenhum'
+        });
+      }
+
       if (!error && data) return data;
     }
     // Mock Fallback (Simplificado para brevidade)
@@ -154,12 +230,30 @@ export const supabaseService = {
   },
 
   // --- DASHBOARD ---
-  getStats: async (filters: { dateStart?: string, dateEnd?: string, storeId?: string, roleId?: string } = {}) => {
+  getStats: async (filters: { dateStart?: string, dateEnd?: string, storeId?: string, roleId?: string } = {}, currentUser?: AdminUser) => {
     if (!supabase) {
       return { total: 0, byStore: [], byRole: [], byTime: [], byHour: [] };
     }
 
     let query = supabase.from('candidates').select('*, cidade_loja:stores(nome_loja), cargo:job_roles(nome)');
+
+    // Restrição de Acesso (Franqueado)
+    if (currentUser?.role === 'franqueado') {
+      const allowedStores = currentUser.lojas_permitidas || [];
+      const allowedRoles = currentUser.cargos_permitidos || [];
+
+      console.log("--- DEBUG STATS ACCESS ---");
+      console.log("Allowed Stores:", JSON.stringify(allowedStores));
+      console.log("Allowed Roles:", JSON.stringify(allowedRoles));
+
+      if (allowedStores.length > 0) query = query.in('cidade_loja_id', allowedStores);
+      if (allowedRoles.length > 0) query = query.in('cargo_id', allowedRoles);
+
+      if (allowedStores.length === 0 && allowedRoles.length === 0) {
+        console.warn("STATS BLOCKED: NO PERMISSIONS");
+        return { total: 0, byStore: [], byRole: [], byTime: [], byHour: [] };
+      }
+    }
 
     // Apply Date Filters (Assuming Filter dates are YYYY-MM-DD from UI)
     // We adjust UI dates to cover the full day in UTC to catch relevant records
@@ -174,6 +268,10 @@ export const supabaseService = {
     if (filters.roleId) query = query.eq('cargo_id', filters.roleId);
 
     const { data: candidates, error } = await query;
+    console.log("--- QUERY RESULT (Stats) ---", {
+      count: candidates?.length || 0,
+      error_msg: error?.message || 'None'
+    });
     const items = candidates || [];
 
     // --- AGGREGATION LOGIC ---
@@ -268,10 +366,16 @@ export const supabaseService = {
         nome: authData.user.user_metadata.full_name || email.split('@')[0],
         email: email,
         role: 'franqueado' as const,
+        lojas_permitidas: [],
+        cargos_permitidos: []
       };
     }
 
-    return profile;
+    return {
+      ...profile,
+      lojas_permitidas: profile.lojas_permitidas || [],
+      cargos_permitidos: profile.cargos_permitidos || []
+    };
   },
 
   logout: async () => {
@@ -289,11 +393,21 @@ export const supabaseService = {
       .eq('id', session.user.id)
       .single();
 
-    return profile || {
-      id: session.user.id,
-      nome: session.user.email?.split('@')[0] || 'User',
-      email: session.user.email || '',
-      role: 'franqueado'
+    if (!profile) {
+      return {
+        id: session.user.id,
+        nome: session.user.email?.split('@')[0] || 'User',
+        email: session.user.email || '',
+        role: 'franqueado',
+        lojas_permitidas: [],
+        cargos_permitidos: []
+      };
+    }
+
+    return {
+      ...profile,
+      lojas_permitidas: profile.lojas_permitidas || [],
+      cargos_permitidos: profile.cargos_permitidos || []
     };
   },
 
@@ -308,28 +422,36 @@ export const supabaseService = {
   },
 
   saveUser: async (user: Omit<AdminUser, 'id' | 'created_at'> & { id?: string }) => {
-    if (supabase) {
-      const { data, error } = await supabase
-        .from('admin_users')
-        .upsert([{
-          id: user.id,
-          ...user
-        }])
-        .select()
-        .single();
+    if (!supabase) throw new Error('Supabase not initialized');
 
-      if (!error && data) return data;
-      throw new Error(error?.message || 'Erro ao salvar usuário');
-    }
-    return user as AdminUser;
+    // Usamos a Edge Function para garantir sincronia com o Auth (metadata) e bypass de RLS se necessário
+    const { data, error } = await supabase.functions.invoke('manage-users', {
+      body: {
+        action: 'update_user',
+        ...user
+      }
+    });
+
+    if (error) throw new Error(data?.message || error.message || 'Erro ao salvar usuário');
+    if (data?.error) throw new Error(data.message || data.error);
+
+    return data;
   },
 
   deleteUser: async (id: string) => {
-    if (supabase) {
-      const { error } = await supabase.from('admin_users').delete().eq('id', id);
-      if (error) throw new Error(error.message);
-      return;
-    }
+    if (!supabase) throw new Error('Supabase not initialized');
+
+    const { data, error } = await supabase.functions.invoke('manage-users', {
+      body: {
+        action: 'delete_user',
+        userId: id
+      }
+    });
+
+    if (error) throw new Error(data?.message || error.message || 'Erro ao deletar usuário');
+    if (data?.error) throw new Error(data.message || data.error);
+
+    return true;
   },
 
   // --- DELETE CANDIDATE (DB + DRIVE) ---
@@ -373,5 +495,56 @@ export const supabaseService = {
       console.error('Erro ao excluir candidato:', error);
       throw new Error(error.message || 'Erro ao excluir candidato');
     }
+  },
+
+  // --- USER MANAGEMENT (EDGE FUNCTION) ---
+  createUser: async (user: Omit<AdminUser, 'id'>, password: string) => {
+    if (!supabase) throw new Error('Supabase not initialized');
+
+    const { data, error } = await supabase.functions.invoke('manage-users', {
+      body: {
+        action: 'create_user',
+        email: user.email,
+        password: password,
+        nome: user.nome, // Corrigido de 'name' para 'nome'
+        role: user.role,
+        lojas_permitidas: user.lojas_permitidas,
+        cargos_permitidos: user.cargos_permitidos
+      }
+    });
+
+    if (error) {
+      console.error('Edge Function Error:', error);
+      const message = data?.message || data?.error || error.message || 'Erro desconhecido na execução da função.';
+      throw new Error(message);
+    }
+
+    if (data?.error) {
+      throw new Error(data.message || data.error);
+    }
+
+    return data;
+  },
+
+  updateUserPassword: async (userId: string, newPassword: string) => {
+    if (!supabase) throw new Error('Supabase not initialized');
+
+    const { data, error } = await supabase.functions.invoke('manage-users', {
+      body: {
+        action: 'update_password',
+        userId,
+        newPassword
+      }
+    });
+
+    if (error) {
+      console.error('Edge Function Error (Password):', error);
+      const message = data?.error || error.message || 'Erro ao atualizar senha.';
+      throw new Error(message);
+    }
+
+    if (data?.error) throw new Error(data.error);
+
+    return data;
   }
 };

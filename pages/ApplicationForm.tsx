@@ -102,8 +102,8 @@ const ApplicationForm: React.FC<{ theme?: 'light' | 'dark', onToggleTheme?: () =
         <div className="container mx-auto px-4">
           <div className="max-w-3xl mx-auto">
             <div className="text-center mb-12">
-              <h1 className="text-4xl font-black uppercase italic mb-4 dark:text-white underline decoration-gigante-red decoration-4 underline-offset-8">Faça sua Candidatura</h1>
-              <p className="text-gray-500 font-bold uppercase text-[10px] tracking-widest mt-6">Sistema Oficial Gigante Pneus</p>
+              <h1 className="text-4xl font-black uppercase italic mb-4 text-black underline decoration-gigante-red decoration-4 underline-offset-8">Faça sua Candidatura</h1>
+              <p className="text-slate-600 dark:text-slate-400 font-bold uppercase text-[10px] tracking-widest mt-6 italic">Sistema Oficial Gigante Pneus</p>
             </div>
 
             <div className="bg-white rounded-sm shadow-2xl p-8 md:p-12 border-b-8 border-black dark:bg-gigante-dark dark:border-gigante-red">

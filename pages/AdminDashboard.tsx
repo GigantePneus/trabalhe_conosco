@@ -72,8 +72,8 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ user, onLogout, theme, 
 
   const loadInitialData = async () => {
     const [s, r] = await Promise.all([
-      supabaseService.getStores(),
-      supabaseService.getRoles()
+      supabaseService.getStores(user),
+      supabaseService.getRoles(user)
     ]);
     setStores(s);
     setRoles(r);
@@ -81,7 +81,7 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ user, onLogout, theme, 
 
   const refreshStats = async () => {
     setLoading(true);
-    const s = await supabaseService.getStats(filters);
+    const s = await supabaseService.getStats(filters, user);
     setStats(s);
     setLoading(false);
   };
@@ -200,8 +200,8 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ user, onLogout, theme, 
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
           <StatCard title="Total Filtrado" value={stats.total} icon={<Users size={20} />} trend="+12% que ontem" />
           <StatCard title="Novos Candidatos" value="12" icon={<Clock size={20} />} trend="Hoje" color="red" />
-          <StatCard title="Unidades" value={stores.length} icon={<StoreIcon size={20} />} />
-          <StatCard title="Vagas Ativas" value={roles.length} icon={<Briefcase size={20} />} />
+          <StatCard title="Unidades" value={stores.length} icon={<StoreIcon size={20} />} color="red" />
+          <StatCard title="Vagas Ativas" value={roles.length} icon={<Briefcase size={20} />} color="blue" />
         </div>
 
         {/* Charts Grid */}
@@ -264,20 +264,37 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ user, onLogout, theme, 
   );
 };
 
-const StatCard = ({ title, value, icon, trend, color = 'slate' }: any) => (
-  <div className="bg-white dark:bg-zinc-900 p-6 rounded-2xl shadow-premium border border-slate-100 dark:border-white/5 group hover:border-gigante-red/20 transition-all">
-    <div className="flex justify-between items-start mb-4">
-      <div className={`p-2.5 rounded-xl ${color === 'red' ? 'bg-red-50 text-gigante-red' : 'bg-slate-50 text-slate-400'} dark:bg-white/5 transition-colors`}>
-        {icon}
+const StatCard = ({ title, value, icon, trend, color = 'slate' }: any) => {
+  const themes = {
+    red: 'bg-red-50 text-gigante-red',
+    blue: 'bg-blue-50 text-blue-600 font-bold',
+    green: 'bg-emerald-50 text-emerald-600 font-bold',
+    slate: 'bg-slate-50 text-slate-400'
+  } as const;
+
+  const activeTheme = themes[color as keyof typeof themes] || themes.slate;
+
+  return (
+    <div className="bg-white dark:bg-zinc-900 p-6 rounded-3xl shadow-premium border border-slate-100 dark:border-white/5 group hover:border-gigante-red/20 hover:shadow-xl transition-all duration-300">
+      <div className="flex justify-between items-start mb-5">
+        <div className={`p-3 rounded-2xl ${activeTheme} dark:bg-white/5 transition-colors group-hover:scale-110 duration-300`}>
+          {icon}
+        </div>
+        {trend && (
+          <span className="text-[10px] font-bold text-emerald-500 bg-emerald-50 dark:bg-emerald-500/10 px-3 py-1 rounded-full border border-emerald-100/50 dark:border-emerald-500/20">
+            {trend}
+          </span>
+        )}
       </div>
-      {trend && <span className="text-[10px] font-bold text-emerald-500 bg-emerald-50 dark:bg-emerald-500/10 px-2 py-0.5 rounded-full">{trend}</span>}
+      <div>
+        <p className="text-[10px] font-bold text-slate-400 uppercase tracking-[0.15em] mb-1 ml-0.5">{title}</p>
+        <div className="flex items-baseline gap-1">
+          <p className="text-3xl font-black text-slate-900 dark:text-white tracking-tight">{value}</p>
+        </div>
+      </div>
     </div>
-    <div>
-      <p className="text-[11px] font-bold text-slate-400 uppercase tracking-wider mb-1">{title}</p>
-      <p className="text-3xl font-extrabold text-slate-900 dark:text-white tracking-tight">{value}</p>
-    </div>
-  </div>
-);
+  );
+};
 
 const RankList = ({ title, data, total, color = 'red' }: any) => (
   <div className="bg-white dark:bg-zinc-900 p-8 rounded-2xl shadow-premium border border-slate-100 dark:border-white/5">

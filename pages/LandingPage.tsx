@@ -32,7 +32,7 @@ const LandingPage: React.FC<LandingPageProps> = ({ theme, onToggleTheme }) => {
               <span className="w-1.5 h-1.5 rounded-full bg-gigante-red animate-pulse"></span>
               RECRUTAMENTO ABERTO
             </div>
-            <h1 className="text-5xl md:text-7xl font-extrabold text-slate-900 dark:text-white mb-6 leading-[1.1] tracking-tight">
+            <h1 className="text-5xl md:text-7xl font-extrabold text-black mb-6 leading-[1.1] tracking-tight">
               Faça parte do time <br /><span className="text-gigante-red italic">Gigante Pneus</span>
             </h1>
             <p className="text-lg text-slate-500 dark:text-slate-400 mb-10 leading-relaxed max-w-lg">
