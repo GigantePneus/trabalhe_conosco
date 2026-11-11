@@ -4,29 +4,58 @@ import { supabase } from '../supabase';
 import { ConfigItem } from '../types';
 import { parseJobLandingFromRequisitos } from '../jobsService';
 import { MapPin, BriefcaseBusiness, ArrowRight, Loader2, CalendarDays, BadgeDollarSign, Share2 } from 'lucide-react';
-import bannerVerde from '../imagens/banner LP - verde.png';
+import bannerGigante from '../imagens/banner LP - Gigante Pneus.png';
 
 const PublicJobsBoard: React.FC = () => {
   const [jobs, setJobs] = useState<ConfigItem[]>([]);
   const [loading, setLoading] = useState(true);
+  const [hasError, setHasError] = useState(false);
 
   useEffect(() => {
+    let isMounted = true;
     const load = async () => {
       try {
-        const { data } = await supabase.from('cargos').select('*').order('created_at', { ascending: false });
-        setJobs(data || []);
+        const { data, error } = await supabase
+          .from('cargos_publicos')
+          .select('*')
+          .order('titulo', { ascending: true });
+
+        if (!isMounted) return;
+        if (error) {
+          console.warn('Supabase indisponível ou sem tabela:', error);
+          setHasError(true);
+          setJobs([]);
+        } else {
+          const mappedData: ConfigItem[] = (data || []).map((row: any) => ({
+            id: row.id,
+            nome: row.titulo,
+            requisitos: row.requisitos,
+            created_at: new Date().toISOString(),
+            ...row,
+          }));
+          setJobs(mappedData);
+        }
       } catch (error) {
-        console.error('Erro ao carregar vagas:', error);
+        if (!isMounted) return;
+        console.warn('Erro ao conectar ao banco de vagas:', error);
+        setHasError(true);
         setJobs([]);
       } finally {
-        setLoading(false);
+        if (isMounted) setLoading(false);
       }
     };
     load();
+    return () => { isMounted = false; };
   }, []);
 
   const activeJobs = jobs
-    .map(cargo => ({ cargo, landing: parseJobLandingFromRequisitos(cargo) }))
+    .map(cargo => {
+      const landing = parseJobLandingFromRequisitos(cargo);
+      if ((cargo as any).publicada === true) {
+        landing.published = true;
+      }
+      return { cargo, landing };
+    })
     .filter(item => item.landing.published);
 
   const handleShare = async (title: string, slug: string) => {
@@ -47,32 +76,24 @@ const PublicJobsBoard: React.FC = () => {
     }
   };
 
-  if (loading) {
-    return (
-      <div className="min-h-[60vh] flex items-center justify-center">
-        <Loader2 className="h-10 w-10 animate-spin text-teal-600" />
-      </div>
-    );
-  }
-
   return (
     <div className="bg-[#f5f8ff] dark:bg-[#020817] min-h-screen">
       <div className="max-w-6xl mx-auto px-4 py-6 md:py-10">
 
-        {/* Banner LP Verde */}
+        {/* Banner LP Gigante Pneus (Renderizado independentemente de loading ou erro) */}
         <img
-          src={bannerVerde}
+          src={bannerGigante}
           alt="Carreiras Gigante"
-          className="w-full rounded-[2rem] border border-emerald-700/20 shadow-2xl object-cover mb-8"
+          className="w-full rounded-[2rem] border border-gray-200 dark:border-gray-800 shadow-2xl object-cover mb-8"
         />
 
         {/* Título e subtítulo */}
-        <div className="rounded-[2rem] text-white border border-emerald-700/40 bg-gradient-to-r from-emerald-500/20 via-emerald-600/30 to-emerald-900/40 backdrop-blur-sm p-5 md:p-7 mb-8">
+        <div className="rounded-[2rem] text-white border border-red-600/20 bg-gradient-to-r from-red-600/10 via-gray-100/50 to-gray-200/50 dark:from-red-950/20 dark:to-gray-900/20 backdrop-blur-sm p-5 md:p-7 mb-8">
           <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
             <div>
               <span className="inline-flex bg-[#ffcc00] text-[#072a5a] px-3 py-1 rounded-full text-[10px] font-black uppercase">Carreiras Gigante</span>
-              <h1 className="mt-3 text-3xl md:text-5xl font-black tracking-tighter leading-[0.95] text-[#034b1c]">Vagas Abertas</h1>
-              <p className="text-[#034b1c] mt-3 max-w-2xl font-medium text-sm">
+              <h1 className="mt-3 text-3xl md:text-5xl font-black tracking-tighter leading-[0.95] text-gray-900 dark:text-white">Vagas Abertas</h1>
+              <p className="text-gray-900 dark:text-white mt-3 max-w-2xl font-medium text-sm">
                 Explore oportunidades e encontre uma vaga alinhada ao seu momento profissional.
               </p>
             </div>
@@ -83,8 +104,30 @@ const PublicJobsBoard: React.FC = () => {
           </div>
         </div>
 
-        {/* Cards de vagas */}
-        {activeJobs.length === 0 ? (
+        {/* Área de conteúdo de vagas com tratamento de loading, erro e lista */}
+        {loading ? (
+          <div className="min-h-[30vh] flex flex-col items-center justify-center bg-white dark:bg-gray-900 rounded-3xl border border-gray-200 dark:border-gray-800 p-10">
+            <Loader2 className="h-10 w-10 animate-spin text-red-600 mb-3" />
+            <p className="text-sm font-semibold text-gray-500 dark:text-gray-400">Carregando oportunidades...</p>
+          </div>
+        ) : hasError ? (
+          <div className="bg-white dark:bg-gray-900 rounded-3xl border border-amber-500/20 p-8 text-center">
+            <p className="text-base font-bold text-gray-800 dark:text-gray-200">
+              Estamos atualizando nosso catálogo de oportunidades.
+            </p>
+            <p className="text-xs text-gray-500 dark:text-gray-400 mt-2">
+              Você também pode cadastrar seu perfil no nosso banco de talentos para ser notificado de novas vagas.
+            </p>
+            <div className="mt-4">
+              <Link 
+                to="/cadastro" 
+                className="inline-flex bg-red-600 hover:bg-red-700 text-white px-5 py-2.5 rounded-xl text-xs font-black uppercase transition-colors"
+              >
+                Cadastrar no Banco de Talentos
+              </Link>
+            </div>
+          </div>
+        ) : activeJobs.length === 0 ? (
           <div className="bg-white dark:bg-gray-900 rounded-3xl border border-gray-200 dark:border-gray-800 p-10 text-center text-gray-500 dark:text-gray-400 font-semibold">
             Nenhuma vaga publicada no momento.
           </div>
@@ -96,11 +139,11 @@ const PublicJobsBoard: React.FC = () => {
                 className="group bg-white dark:bg-[#0b1220] rounded-3xl border border-gray-200 dark:border-gray-700 shadow-lg hover:shadow-2xl transition-all duration-300 overflow-hidden"
               >
                 {/* Cabeçalho do card com gradiente */}
-                <div className="bg-gradient-to-r from-emerald-500/15 via-emerald-600/20 to-emerald-900/25 border-b border-emerald-700/20 p-5 md:p-6">
+                <div className="bg-gradient-to-r from-red-600/5 via-transparent to-transparent border-b border-gray-200 dark:border-gray-800 p-5 md:p-6">
                   <div className="flex items-start justify-between gap-3">
                     <div>
                       <span className="inline-flex bg-[#ffcc00] text-[#072a5a] px-2.5 py-0.5 rounded-full text-[9px] font-black uppercase">Vaga aberta</span>
-                      <h2 className="mt-2 text-xl md:text-2xl font-black tracking-tight leading-tight text-[#034b1c] dark:text-emerald-300 group-hover:text-[#023015] transition-colors">{landing.title}</h2>
+                      <h2 className="mt-2 text-xl md:text-2xl font-black tracking-tight leading-tight text-gray-900 dark:text-white dark:text-emerald-300 group-hover:text-[#023015] transition-colors">{landing.title}</h2>
                     </div>
                   </div>
                 </div>
@@ -166,3 +209,4 @@ const PublicJobsBoard: React.FC = () => {
 };
 
 export default PublicJobsBoard;
+

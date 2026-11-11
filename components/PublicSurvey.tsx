@@ -22,10 +22,10 @@ const PublicSurvey: React.FC = () => {
 
   const fetchPesquisa = async (identifier: string) => {
     try {
-      // Tenta buscar por slug primeiro, depois por UUID
+      // Tenta buscar por slug primeiro, depois por UUID (usando coluna oficial 'ativa')
       const isUUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(identifier);
       
-      let query = supabase.from('pesquisas').select('*').eq('is_active', true);
+      let query = supabase.from('pesquisas').select('*').eq('ativa', true);
       
       if (isUUID) {
         query = query.eq('id', identifier);
@@ -38,7 +38,10 @@ const PublicSurvey: React.FC = () => {
       if (error || !data) {
         setError('Pesquisa não encontrada ou desativada.');
       } else {
-        setPesquisa(data);
+        setPesquisa({
+          ...data,
+          is_active: data.ativa ?? data.is_active ?? true
+        });
       }
     } catch (e: any) {
       setError('Erro ao carregar a pesquisa.');
@@ -86,7 +89,7 @@ const PublicSurvey: React.FC = () => {
   if (loading) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-gray-50 dark:bg-gray-950">
-        <Loader2 className="h-12 w-12 animate-spin text-teal-600" />
+        <Loader2 className="h-12 w-12 animate-spin text-red-600" />
       </div>
     );
   }
@@ -97,7 +100,7 @@ const PublicSurvey: React.FC = () => {
         <AlertCircle className="h-16 w-16 text-red-500 mb-4" />
         <h2 className="text-2xl font-black text-gray-900 dark:text-white uppercase tracking-tighter mb-2">Ops!</h2>
         <p className="text-gray-500 font-medium mb-6 text-center">{error}</p>
-        <Link to="/" className="bg-teal-600 text-white px-6 py-3 rounded-xl font-bold uppercase hover:bg-teal-700 transition-all">Voltar ao Início</Link>
+        <Link to="/" className="bg-red-600 text-white px-6 py-3 rounded-xl font-bold uppercase hover:bg-red-700 transition-all">Voltar ao Início</Link>
       </div>
     );
   }
@@ -106,12 +109,12 @@ const PublicSurvey: React.FC = () => {
     return (
       <div className="min-h-screen bg-gray-50 dark:bg-gray-950 py-16 px-4">
         <div className="max-w-xl mx-auto bg-white dark:bg-gray-900 p-10 rounded-[3rem] shadow-2xl border border-gray-100 dark:border-gray-800 flex flex-col items-center text-center animate-in zoom-in duration-500">
-          <div className="w-24 h-24 bg-teal-100 dark:bg-teal-900/30 rounded-full flex items-center justify-center mb-6">
-            <CheckCircle2 className="h-12 w-12 text-teal-600" />
+          <div className="w-24 h-24 bg-red-100 dark:bg-red-900/30 rounded-full flex items-center justify-center mb-6">
+            <CheckCircle2 className="h-12 w-12 text-red-600" />
           </div>
           <h2 className="text-3xl font-extrabold text-gray-900 dark:text-white mb-2 tracking-tighter uppercase">Muito Obrigado!</h2>
           <p className="text-gray-600 dark:text-gray-400 mb-8 text-lg font-medium leading-relaxed">
-            Sua opinião foi registrada e é fundamental para continuarmos cuidando da nossa equipe na <span className="font-bold text-teal-600">Gigante Produtos Médicos</span>.
+            Sua opinião foi registrada e é fundamental para continuarmos cuidando da nossa equipe na <span className="font-bold text-red-600">Gigante Pneus</span>.
           </p>
         </div>
       </div>
@@ -122,8 +125,8 @@ const PublicSurvey: React.FC = () => {
     <div className="min-h-screen bg-gray-50 dark:bg-gray-950 py-12 px-4">
       <div className="max-w-3xl mx-auto">
         <div className="mb-10 text-center animate-in fade-in duration-700">
-          <div className="inline-flex items-center justify-center p-4 bg-teal-100 dark:bg-teal-900/40 rounded-full mb-6">
-            <ClipboardList className="h-8 w-8 text-teal-600" />
+          <div className="inline-flex items-center justify-center p-4 bg-red-100 dark:bg-red-900/40 rounded-full mb-6">
+            <ClipboardList className="h-8 w-8 text-red-600" />
           </div>
           <h1 className="text-4xl md:text-5xl font-black text-gray-900 dark:text-white mb-4 tracking-tighter uppercase leading-none">
             {pesquisa?.titulo}
@@ -147,7 +150,7 @@ const PublicSurvey: React.FC = () => {
             {pesquisa?.perguntas.map((p, index) => (
               <div key={p.id} className="space-y-4">
                 <label className="block text-sm md:text-base font-black text-gray-800 dark:text-gray-200 uppercase tracking-wide">
-                  <span className="text-teal-600 mr-2">{index + 1}.</span> 
+                  <span className="text-red-600 mr-2">{index + 1}.</span> 
                   {p.enunciado} {p.obrigatoria && <span className="text-red-500">*</span>}
                 </label>
 
@@ -155,7 +158,7 @@ const PublicSurvey: React.FC = () => {
                   <input 
                     type="text"
                     required={p.obrigatoria}
-                    className="w-full px-5 py-4 rounded-2xl border border-gray-200 dark:border-gray-800 dark:bg-gray-800 focus:ring-4 focus:ring-teal-600/10 focus:border-teal-600 transition-all outline-none font-medium text-gray-800 dark:text-white"
+                    className="w-full px-5 py-4 rounded-2xl border border-gray-200 dark:border-gray-800 dark:bg-gray-800 focus:ring-4 focus:ring-red-600/10 focus:border-red-600 transition-all outline-none font-medium text-gray-800 dark:text-white"
                     placeholder="Sua resposta..."
                     value={respostas[p.id] || ''}
                     onChange={e => handleInputChange(p.id, e.target.value)}
@@ -166,7 +169,7 @@ const PublicSurvey: React.FC = () => {
                   <textarea 
                     rows={4}
                     required={p.obrigatoria}
-                    className="w-full px-5 py-4 rounded-2xl border border-gray-200 dark:border-gray-800 dark:bg-gray-800 focus:ring-4 focus:ring-teal-600/10 focus:border-teal-600 transition-all outline-none font-medium text-gray-800 dark:text-white resize-none"
+                    className="w-full px-5 py-4 rounded-2xl border border-gray-200 dark:border-gray-800 dark:bg-gray-800 focus:ring-4 focus:ring-red-600/10 focus:border-red-600 transition-all outline-none font-medium text-gray-800 dark:text-white resize-none"
                     placeholder="Escreva detalhadamente..."
                     value={respostas[p.id] || ''}
                     onChange={e => handleInputChange(p.id, e.target.value)}
@@ -182,8 +185,8 @@ const PublicSurvey: React.FC = () => {
                         onClick={() => handleInputChange(p.id, nota)}
                         className={`w-12 h-12 md:w-16 md:h-16 rounded-2xl font-black text-lg md:text-xl transition-all border-2 flex items-center justify-center ${
                           respostas[p.id] === nota 
-                            ? 'bg-teal-600 border-teal-600 text-white shadow-lg shadow-teal-600/30 scale-110' 
-                            : 'bg-gray-50 dark:bg-gray-800 border-gray-200 dark:border-gray-700 text-gray-500 hover:border-teal-600/50 hover:text-teal-600'
+                            ? 'bg-red-600 border-red-600 text-white shadow-lg shadow-red-600/30 scale-110' 
+                            : 'bg-gray-50 dark:bg-gray-800 border-gray-200 dark:border-gray-700 text-gray-500 hover:border-red-600/50 hover:text-red-600'
                         }`}
                       >
                         {nota}
@@ -197,8 +200,8 @@ const PublicSurvey: React.FC = () => {
                     {p.opcoes?.map((opcao: string, oIndex: number) => (
                       <label key={oIndex} className={`flex items-center gap-4 p-4 rounded-2xl border-2 cursor-pointer transition-all ${
                         respostas[p.id] === opcao 
-                          ? 'border-teal-600 bg-teal-50 dark:bg-teal-900/20 shadow-sm' 
-                          : 'border-gray-200 dark:border-gray-800 bg-gray-50 dark:bg-gray-800 hover:border-teal-300'
+                          ? 'border-red-600 bg-red-50 dark:bg-red-900/20 shadow-sm' 
+                          : 'border-gray-200 dark:border-gray-800 bg-gray-50 dark:bg-gray-800 hover:border-red-300'
                       }`}>
                         <input 
                           type="radio" 
@@ -206,9 +209,9 @@ const PublicSurvey: React.FC = () => {
                           value={opcao}
                           checked={respostas[p.id] === opcao}
                           onChange={() => handleInputChange(p.id, opcao)}
-                          className="w-5 h-5 text-teal-600 focus:ring-teal-600 dark:bg-gray-700 dark:border-gray-600"
+                          className="w-5 h-5 text-red-600 focus:ring-red-600 dark:bg-gray-700 dark:border-gray-600"
                         />
-                        <span className={`font-bold text-sm uppercase ${respostas[p.id] === opcao ? 'text-teal-700 dark:text-teal-300' : 'text-gray-600 dark:text-gray-300'}`}>
+                        <span className={`font-bold text-sm uppercase ${respostas[p.id] === opcao ? 'text-red-700 dark:text-red-300' : 'text-gray-600 dark:text-gray-300'}`}>
                           {opcao}
                         </span>
                       </label>
@@ -239,3 +242,4 @@ const PublicSurvey: React.FC = () => {
 };
 
 export default PublicSurvey;
+

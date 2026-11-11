@@ -1,5 +1,5 @@
 import { ConfigItem, JobLandingContent } from './types';
-import heroVagasDefault from './imagens/banner_hero_vagas.png';
+import heroVagasDefault from './imagens/banner vagas - gigante pneus.png';
 
 const slugify = (value: string) =>
   value
@@ -27,26 +27,27 @@ export const createDefaultJobLanding = (jobName: string): JobLandingContent => (
 });
 
 export const parseJobLandingFromRequisitos = (cargo: ConfigItem): JobLandingContent => {
+  const cargoNome = cargo.titulo || cargo.nome || 'Nova Vaga';
   const rawValue = cargo.requisitos as any;
   const raw = typeof rawValue === 'string' ? rawValue.trim() : (rawValue ? JSON.stringify(rawValue) : '');
   if (!raw) {
-    return createDefaultJobLanding(cargo.nome);
+    return createDefaultJobLanding(cargoNome);
   }
 
   try {
     const parsed = JSON.parse(raw);
     return {
-      ...createDefaultJobLanding(cargo.nome),
+      ...createDefaultJobLanding(cargoNome),
       ...parsed,
-      title: parsed?.title || cargo.nome,
-      slug: parsed?.slug || slugify(cargo.nome),
-      benefits: Array.isArray(parsed?.benefits) ? parsed.benefits : createDefaultJobLanding(cargo.nome).benefits,
-      responsibilities: Array.isArray(parsed?.responsibilities) ? parsed.responsibilities : createDefaultJobLanding(cargo.nome).responsibilities,
-      requirements: Array.isArray(parsed?.requirements) ? parsed.requirements : createDefaultJobLanding(cargo.nome).requirements
+      title: parsed?.title || cargoNome,
+      slug: parsed?.slug || slugify(cargoNome),
+      benefits: Array.isArray(parsed?.benefits) ? parsed.benefits : createDefaultJobLanding(cargoNome).benefits,
+      responsibilities: Array.isArray(parsed?.responsibilities) ? parsed.responsibilities : createDefaultJobLanding(cargoNome).responsibilities,
+      requirements: Array.isArray(parsed?.requirements) ? parsed.requirements : createDefaultJobLanding(cargoNome).requirements
     };
   } catch {
     return {
-      ...createDefaultJobLanding(cargo.nome),
+      ...createDefaultJobLanding(cargoNome),
       requirements: [raw],
       agentContext: raw
     };

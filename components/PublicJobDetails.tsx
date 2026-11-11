@@ -16,32 +16,57 @@ const PublicJobDetails: React.FC = () => {
   const destinationMail = 'sac@gigante.com.br';
 
   useEffect(() => {
+    let isMounted = true;
     const load = async () => {
       try {
-        const { data } = await supabase.from('cargos').select('*');
+        const { data, error } = await supabase.from('cargos_publicos').select('*');
+        if (!isMounted) return;
+        if (error) {
+          console.error('Erro ao carregar detalhe da vaga:', error);
+          setJob(null);
+          return;
+        }
         const match = (data || [])
-          .map((cargo: ConfigItem) => ({ cargo, landing: parseJobLandingFromRequisitos(cargo) }))
+          .map((row: any) => {
+            const cargo: ConfigItem = {
+              id: row.id,
+              nome: row.titulo,
+              requisitos: row.requisitos,
+              created_at: new Date().toISOString(),
+              ...row,
+            };
+            const landing = parseJobLandingFromRequisitos(cargo);
+            if (row.publicada === true) {
+              landing.published = true;
+            }
+            if (row.loja_cidade && landing.location === 'A combinar') {
+              landing.location = `${row.loja_cidade}${row.loja_estado ? ' - ' + row.loja_estado : ''}`;
+            }
+            return { cargo, landing };
+          })
           .find(item => item.landing.slug === slug && item.landing.published);
         setJob(match || null);
       } catch (error) {
+        if (!isMounted) return;
         console.error('Erro ao carregar detalhe da vaga:', error);
         setJob(null);
       } finally {
-        setLoading(false);
+        if (isMounted) setLoading(false);
       }
     };
     load();
+    return () => { isMounted = false; };
   }, [slug]);
 
   if (loading) {
-    return <div className="min-h-[60vh] flex items-center justify-center"><Loader2 className="h-10 w-10 animate-spin text-teal-600" /></div>;
+    return <div className="min-h-[60vh] flex items-center justify-center"><Loader2 className="h-10 w-10 animate-spin text-red-600" /></div>;
   }
 
   if (!job) {
     return (
       <div className="max-w-3xl mx-auto px-4 py-16 text-center">
         <h1 className="text-3xl font-black text-gray-900 dark:text-white">Vaga não encontrada</h1>
-        <Link to="/" className="mt-6 inline-block bg-teal-600 text-white px-5 py-2.5 rounded-xl font-black uppercase text-xs">Voltar para vagas</Link>
+        <Link to="/" className="mt-6 inline-block bg-red-600 text-white px-5 py-2.5 rounded-xl font-black uppercase text-xs">Voltar para vagas</Link>
       </div>
     );
   }
@@ -110,7 +135,7 @@ const PublicJobDetails: React.FC = () => {
         <section className="mt-4 space-y-4">
           <img src={safeLanding.heroImageUrl} alt={safeLanding.title} className="w-full rounded-[2rem] border border-[#0c3c7a] shadow-2xl object-cover" />
 
-          <div className="rounded-[2rem] text-white border border-emerald-700/40 bg-gradient-to-r from-emerald-500/20 via-emerald-600/30 to-emerald-900/40 backdrop-blur-sm p-5 md:p-7">
+          <div className="rounded-[2rem] text-white border border-emerald-700/40 bg-gradient-to-r from-emerald-500/20 via-rose-600/30 to-emerald-900/40 backdrop-blur-sm p-5 md:p-7">
             <div className="grid grid-cols-1 lg:grid-cols-3 gap-5 items-start">
               <div className="lg:col-span-2">
                 <span className="inline-flex bg-[#ffcc00] text-[#072a5a] px-3 py-1 rounded-full text-[10px] font-black uppercase">Vaga aberta</span>
@@ -200,3 +225,4 @@ const PublicJobDetails: React.FC = () => {
 };
 
 export default PublicJobDetails;
+

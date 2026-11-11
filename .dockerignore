@@ -1,13 +1,32 @@
+# Node / build artifacts
 node_modules
 dist
+
+# Git
 .git
 .gitignore
+
+# Editor / OS
+.vscode
+.DS_Store
+thumbs.db
+
+# Local env / logs / caches
+.env
+.env.local
+*.log
+npm-debug.log
+
+# Temp folders ou dados privados
 .agent
 .tempmediaStorage
-C:\\Users\\User\\.gemini\\antigravity
-README.md
+
+# Documentação (opcional)
 walkthrough.md
 task.md
 implementation_plan.md
-Dockerfile
-nginx.conf
+README.md
+
+# Não ignorar: Dockerfile e nginx.conf devem estar presentes no contexto de build
+# Dockerfile
+# nginx.conf

@@ -1,0 +1,35 @@
+version: '3.8'
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: gigante_postgres
+    restart: always
+    environment:
+      POSTGRES_DB: gigante_trabalhe_conosco
+      POSTGRES_USER: gigante_admin
+      POSTGRES_PASSWORD: admin_password_gigante
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+
+  minio:
+    image: minio/minio:latest
+    container_name: gigante_minio
+    restart: always
+    ports:
+      - "9000:9000"       # API S3
+      - "9081:9001"       # Console Web (porta 9081 externa para evitar conflitos no Windows)
+    environment:
+      MINIO_ROOT_USER: minio_admin_gigante
+      MINIO_ROOT_PASSWORD: minio_password_gigante
+    volumes:
+      - minio_data:/data
+    command: server /data --console-address ":9001"
+
+volumes:
+  postgres_data:
+    driver: local
+  minio_data:
+    driver: local

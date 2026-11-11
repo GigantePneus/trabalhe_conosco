@@ -13,7 +13,11 @@ dist
 dist-ssr
 *.local
 
-# Environment Variables & Secrets
+# Test scripts & diagnostic suites
+test_*.ts
+run_*.ts
+audit_*.ts
+
 .env
 .env.local
 .env.development.local

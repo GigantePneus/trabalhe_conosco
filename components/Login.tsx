@@ -28,14 +28,24 @@ const Login: React.FC = () => {
     }
   };
 
+  const handleBypass = () => {
+    const mockUser = {
+      id: 'mock_rh_admin',
+      email: 'rh@gigantepneus.com.br',
+      user_metadata: { name: 'Administrador Demo' }
+    };
+    localStorage.setItem('abucci_mock_user', JSON.stringify(mockUser));
+    window.location.reload();
+  };
+
   return (
     <div className="min-h-[calc(100vh-160px)] flex items-center justify-center px-4 py-12">
       <div className="max-w-md w-full">
         <div className="bg-white dark:bg-gray-900 p-10 rounded-3xl shadow-2xl border border-gray-100 dark:border-gray-800 relative overflow-hidden">
-          <div className="absolute top-0 right-0 w-32 h-32 bg-teal-600/5 rounded-full -mr-16 -mt-16"></div>
+          <div className="absolute top-0 right-0 w-32 h-32 bg-red-600/5 rounded-full -mr-16 -mt-16"></div>
           
           <div className="text-center mb-10 relative">
-            <div className="bg-teal-600 w-20 h-20 rounded-2xl flex items-center justify-center mx-auto mb-6 shadow-xl rotate-3">
+            <div className="bg-red-600 w-20 h-20 rounded-2xl flex items-center justify-center mx-auto mb-6 shadow-xl rotate-3">
               <ShieldCheck className="h-10 w-10 text-white" />
             </div>
             <h1 className="text-3xl font-extrabold text-gray-900 dark:text-white uppercase tracking-tighter">Área do RH</h1>
@@ -57,8 +67,8 @@ const Login: React.FC = () => {
                 <input 
                   required
                   type="email"
-                  className="w-full pl-12 pr-4 py-4 rounded-xl border border-gray-300 dark:border-gray-700 dark:bg-gray-800 focus:ring-4 focus:ring-teal-600/10 focus:border-teal-600 outline-none transition-all font-medium"
-                  placeholder="rh@gigante.com.br"
+                  className="w-full pl-12 pr-4 py-4 rounded-xl border border-gray-300 dark:border-gray-700 dark:bg-gray-800 focus:ring-4 focus:ring-red-600/10 focus:border-red-600 outline-none transition-all font-medium"
+                  placeholder="rh@gigantepneus.com.br"
                   value={email}
                   onChange={e => setEmail(e.target.value)}
                 />
@@ -72,7 +82,7 @@ const Login: React.FC = () => {
                 <input 
                   required
                   type={showPassword ? "text" : "password"}
-                  className="w-full pl-12 pr-12 py-4 rounded-xl border border-gray-300 dark:border-gray-700 dark:bg-gray-800 focus:ring-4 focus:ring-teal-600/10 focus:border-teal-600 outline-none transition-all font-medium"
+                  className="w-full pl-12 pr-12 py-4 rounded-xl border border-gray-300 dark:border-gray-700 dark:bg-gray-800 focus:ring-4 focus:ring-red-600/10 focus:border-red-600 outline-none transition-all font-medium"
                   placeholder="••••••••"
                   value={password}
                   onChange={e => setPassword(e.target.value)}
@@ -80,7 +90,7 @@ const Login: React.FC = () => {
                 <button
                   type="button"
                   onClick={() => setShowPassword(!showPassword)}
-                  className="absolute right-4 top-1/2 -translate-y-1/2 text-gray-400 hover:text-teal-600 transition-colors p-1"
+                  className="absolute right-4 top-1/2 -translate-y-1/2 text-gray-400 hover:text-red-600 transition-colors p-1"
                 >
                   {showPassword ? <EyeOff className="h-5 w-5" /> : <Eye className="h-5 w-5" />}
                 </button>
@@ -90,14 +100,22 @@ const Login: React.FC = () => {
             <button 
               disabled={loading}
               type="submit"
-              className="w-full bg-teal-600 hover:bg-teal-700 text-white py-4 rounded-xl font-bold uppercase text-xl shadow-xl hover:shadow-teal-600/20 transition-all flex items-center justify-center gap-3 disabled:opacity-70"
+              className="w-full bg-red-600 hover:bg-red-700 text-white py-4 rounded-xl font-bold uppercase text-xl shadow-xl hover:shadow-red-600/20 transition-all flex items-center justify-center gap-3 disabled:opacity-70"
             >
               {loading ? <Loader2 className="h-6 w-6 animate-spin" /> : "Acessar Painel"}
+            </button>
+
+            <button 
+              type="button"
+              onClick={handleBypass}
+              className="w-full mt-2 bg-gray-100 hover:bg-gray-200 dark:bg-gray-800 dark:hover:bg-gray-700 text-gray-700 dark:text-gray-300 py-3.5 rounded-xl font-bold uppercase text-xs transition-all flex items-center justify-center gap-2"
+            >
+              Acesso Rápido (Bypass Demo)
             </button>
           </form>
 
           <p className="mt-10 text-center text-[10px] text-gray-400 uppercase tracking-widest font-black">
-            Gigante Produtos Médicos &copy; Proteção de Dados de RH
+            Gigante Pneus &copy; Proteção de Dados de RH
           </p>
         </div>
       </div>

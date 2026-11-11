@@ -1,4 +1,4 @@
-import { GoogleGenAI } from "@google/genai";
+﻿import { GoogleGenAI } from "@google/genai";
 import { Pergunta, Candidato } from "./types";
 
 const OLLAMA_URL = import.meta.env.VITE_OLLAMA_URL || 'http://128.140.120.73:11434';
@@ -344,3 +344,4 @@ const parseTalentResponse = (text: string): TalentAnalysisResult => {
     weaknesses: weaknesses.length > 0 ? weaknesses : ["Precisa aprofundar experiência técnica"]
   };
 };
+
