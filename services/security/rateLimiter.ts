@@ -4,6 +4,7 @@ export interface RateLimitResult {
   allowed: boolean;
   remaining: number;
   retryAfterSeconds?: number;
+  serviceUnavailable?: boolean;
 }
 
 interface RateLimitEntry {
@@ -83,6 +84,7 @@ export async function checkDistributedRateLimit(
   clientOverride?: SupabaseClient | null
 ): Promise<RateLimitResult> {
   const supa = clientOverride || getSupabaseClient();
+  const isProd = process.env.NODE_ENV === 'production' || !!process.env.VERCEL;
 
   if (supa) {
     try {
@@ -99,11 +101,25 @@ export async function checkDistributedRateLimit(
           retryAfterSeconds: data.allowed ? 0 : Number(data.retryAfterSeconds) || windowSeconds
         };
       }
-    } catch {
-      // Fallback gracioso para rate limiter em memória
+
+      console.error('[RateLimiter] Erro na RPC check_rate_limit:', error?.message);
+    } catch (err: any) {
+      console.error('[RateLimiter] Exceção na chamada de rate limit:', err?.message);
     }
+  } else {
+    console.warn('[RateLimiter] Supabase Client indisponível para rate limiting.');
   }
 
-  // Fallback em memória
+  // Comportamento FAIL-CLOSED em produção: se a infraestrutura distribuída falhar, rejeita com 503 e Retry-After
+  if (isProd) {
+    return {
+      allowed: false,
+      remaining: 0,
+      retryAfterSeconds: 30,
+      serviceUnavailable: true
+    };
+  }
+
+  // Fallback em memória exclusivo para testes e desenvolvimento local offline
   return candidaturasRateLimiter.isAllowed(key);
 }

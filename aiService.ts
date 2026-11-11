@@ -46,9 +46,10 @@ const callOllama = async (prompt: string, model: string = 'llama3.2:3b') => {
 
 // Helper para chamar a API do Gemini
 const callGemini = async (prompt: string, apiKey?: string, model: string = 'gemini-2.5-flash') => {
-  const finalApiKey = apiKey || import.meta.env.VITE_GEMINI_API_KEY || import.meta.env.GEMINI_API_KEY || '';
+  // Segurança estrita: Nenhuma chave privada é injetada no frontend via variáveis de ambiente
+  const finalApiKey = apiKey?.trim() || '';
   if (!finalApiKey) {
-    throw new Error("Chave do Gemini não configurada nas configurações.");
+    throw new Error("Integração Gemini desativada no cliente por segurança de credenciais. Configure sua chave no painel de administração para utilizar a análise.");
   }
   const ai = new GoogleGenAI({ apiKey: finalApiKey });
   const response = await ai.models.generateContent({
@@ -183,9 +184,9 @@ Evite rodeios e seja cirúrgico em sua avaliação técnica e comportamental.`;
 };
 
 export const listAvailableGeminiModels = async (apiKey?: string): Promise<string[]> => {
-  const finalApiKey = apiKey || import.meta.env.VITE_GEMINI_API_KEY || import.meta.env.GEMINI_API_KEY || '';
+  const finalApiKey = apiKey?.trim() || '';
   if (!finalApiKey) {
-    return [];
+    return ['gemini-2.5-flash', 'gemini-3.5-flash'];
   }
 
   const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models?key=${encodeURIComponent(finalApiKey)}`);

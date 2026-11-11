@@ -136,6 +136,9 @@ function candidaturasApiPlugin(): Plugin {
                 '127.0.0.1';
               const result = await handleCandidatura(body, clientIp);
 
+              if (result.statusCode === 503 || result.statusCode === 429) {
+                res.setHeader('Retry-After', '30');
+              }
               res.statusCode = result.statusCode;
               res.setHeader('Content-Type', 'application/json');
               res.end(JSON.stringify(result.data));
@@ -164,11 +167,6 @@ export default defineConfig(({ mode }) => {
         react(),
         candidaturasApiPlugin()
       ],
-      define: {
-        // NUNCA expor variáveis GOOGLE_ ou segredos ao bundle do cliente
-        'process.env.API_KEY': JSON.stringify(env.GEMINI_API_KEY),
-        'process.env.GEMINI_API_KEY': JSON.stringify(env.GEMINI_API_KEY)
-      },
       resolve: {
         alias: {
           '@': path.resolve(__dirname, '.'),

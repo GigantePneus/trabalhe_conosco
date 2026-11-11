@@ -127,9 +127,18 @@ export async function handleCandidatura(
   clientIp = '127.0.0.1'
 ): Promise<{ statusCode: number; data: CandidaturaResponse }> {
   try {
-    // 1. Rate Limiting Compartilhado Distribuído (Serverless) com Fallback em Memória
+    // 1. Rate Limiting Compartilhado Distribuído (Serverless) com Fail-Closed em Produção
     const rateCheck = await checkDistributedRateLimit(clientIp, 15, 60);
     if (!rateCheck.allowed) {
+      if (rateCheck.serviceUnavailable) {
+        return {
+          statusCode: 503,
+          data: {
+            success: false,
+            mensagem: 'Serviço temporariamente indisponível para controle de tráfego. Tente novamente em alguns instantes.'
+          }
+        };
+      }
       return {
         statusCode: 429,
         data: {
@@ -496,6 +505,20 @@ export default async function vercelHandler(req: any, res: any) {
     req.socket?.remoteAddress ||
     '127.0.0.1';
 
-  const result = await handleCandidatura(req.body, clientIp);
+  let body = req.body;
+  if (typeof body === 'string') {
+    try {
+      body = JSON.parse(body);
+    } catch {
+      // payload json bruto
+    }
+  }
+
+  const result = await handleCandidatura(body || {}, clientIp);
+
+  if (result.statusCode === 503 || result.statusCode === 429) {
+    res.setHeader('Retry-After', '30');
+  }
+
   return res.status(result.statusCode).json(result.data);
 }
