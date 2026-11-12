@@ -5,7 +5,8 @@ import {
   BarChart3, Users, ClipboardList, Sparkles, Briefcase, Settings, Building2,
   Eye, Download, MapPin, X, Loader2, Plus, Trash2, TrendingUp, ShieldCheck, Calendar,
   Link2, Copy, CheckCheck, ChevronLeft, ToggleLeft, ToggleRight, FileText, Hash, AlignLeft, ListChecks, Star,
-  Share2, ExternalLink, MessageCircle, Brain, Award, Zap, Check, AlertTriangle, ThumbsUp, ThumbsDown, RefreshCw
+  Share2, ExternalLink, MessageCircle, Brain, Award, Zap, Check, AlertTriangle, ThumbsUp, ThumbsDown, RefreshCw,
+  KeyRound, Lock, EyeOff, Shield
 } from 'lucide-react';
 import { analyzeSurveyResponses, analyzeTalentCompatibility, listAvailableGeminiModels, AIAnalysisResult, TalentAnalysisResult, DEFAULT_PROMPT_SURVEYS, DEFAULT_PROMPT_TALENTS } from '../aiService';
 import { createDefaultJobLanding, parseJobLandingFromRequisitos, serializeJobLanding, toLines } from '../jobsService';
@@ -26,7 +27,8 @@ const AdminDashboard: React.FC = () => {
   const [lojaFormData, setLojaFormData] = useState({
     nome: '',
     cidade: '',
-    estado: 'SP',
+    estado: 'PR',
+    google_drive_folder_id: '',
     email_contato: '',
     telefone_contato: '',
     ativa: true
@@ -110,12 +112,22 @@ const AdminDashboard: React.FC = () => {
   const [promptTalents, setPromptTalents] = useState(() => localStorage.getItem('gigante_prompt_talents') || DEFAULT_PROMPT_TALENTS);
   const [promptSaveStatus, setPromptSaveStatus] = useState<'idle' | 'saved'>('idle');
 
-  // Estado da Gestão de Usuários
-  const [settingsSubTab, setSettingsSubTab] = useState<'geral' | 'usuarios'>('geral');
+  // Estado da Gestão de Usuários e Segurança
+  const [settingsSubTab, setSettingsSubTab] = useState<'geral' | 'seguranca' | 'usuarios'>('geral');
   const [newUserEmail, setNewUserEmail] = useState('');
   const [newUserPassword, setNewUserPassword] = useState('');
   const [creatingUser, setCreatingUser] = useState(false);
   const [userMsg, setUserMsg] = useState({ text: '', type: '' });
+
+  // Estado da Alteração de Senha (Minha Conta > Segurança)
+  const [currentPassword, setCurrentPassword] = useState('');
+  const [newPassword, setNewPassword] = useState('');
+  const [confirmPassword, setConfirmPassword] = useState('');
+  const [showCurrentPassword, setShowCurrentPassword] = useState(false);
+  const [showNewPassword, setShowNewPassword] = useState(false);
+  const [showConfirmPassword, setShowConfirmPassword] = useState(false);
+  const [changingPassword, setChangingPassword] = useState(false);
+  const [passwordMsg, setPasswordMsg] = useState<{ text: string; type: 'success' | 'error' | '' }>({ text: '', type: '' });
 
   useEffect(() => {
     const checkAuthAndProfile = async () => {
@@ -381,7 +393,8 @@ const AdminDashboard: React.FC = () => {
     setLojaFormData({
       nome: '',
       cidade: '',
-      estado: 'SP',
+      estado: 'PR',
+      google_drive_folder_id: '',
       email_contato: '',
       telefone_contato: '',
       ativa: true
@@ -395,7 +408,8 @@ const AdminDashboard: React.FC = () => {
     setLojaFormData({
       nome: loja.nome || '',
       cidade: loja.cidade || '',
-      estado: loja.estado || 'SP',
+      estado: loja.estado || 'PR',
+      google_drive_folder_id: loja.google_drive_folder_id || '',
       email_contato: loja.email_contato || '',
       telefone_contato: loja.telefone_contato || '',
       ativa: loja.ativa ?? true
@@ -421,6 +435,7 @@ const AdminDashboard: React.FC = () => {
             nome: lojaFormData.nome.trim(),
             cidade: lojaFormData.cidade.trim(),
             estado: lojaFormData.estado.trim().toUpperCase(),
+            google_drive_folder_id: lojaFormData.google_drive_folder_id.trim() || null,
             email_contato: lojaFormData.email_contato.trim() || null,
             telefone_contato: lojaFormData.telefone_contato.trim() || null,
             ativa: lojaFormData.ativa
@@ -436,6 +451,7 @@ const AdminDashboard: React.FC = () => {
             nome: lojaFormData.nome.trim(),
             cidade: lojaFormData.cidade.trim(),
             estado: lojaFormData.estado.trim().toUpperCase(),
+            google_drive_folder_id: lojaFormData.google_drive_folder_id.trim() || null,
             email_contato: lojaFormData.email_contato.trim() || null,
             telefone_contato: lojaFormData.telefone_contato.trim() || null,
             ativa: true
@@ -862,6 +878,91 @@ const AdminDashboard: React.FC = () => {
       localStorage.setItem('gigante_prompt_talents', DEFAULT_PROMPT_TALENTS);
       setPromptSaveStatus('saved');
       setTimeout(() => setPromptSaveStatus('idle'), 2500);
+    }
+  };
+
+  // === SEGURANÇA / ALTERAÇÃO DE SENHA ===
+  const validateStrongPassword = (pass: string): { valid: boolean; message: string } => {
+    if (pass.length < 8) {
+      return { valid: false, message: 'A nova senha deve ter no mínimo 8 caracteres.' };
+    }
+    if (!/[A-Z]/.test(pass)) {
+      return { valid: false, message: 'A nova senha deve conter pelo menos uma letra maiúscula.' };
+    }
+    if (!/[a-z]/.test(pass)) {
+      return { valid: false, message: 'A nova senha deve conter pelo menos uma letra minúscula.' };
+    }
+    if (!/[0-9]/.test(pass)) {
+      return { valid: false, message: 'A nova senha deve conter pelo menos um número.' };
+    }
+    if (!/[!@#$%^&*()_+\-=\[\]{};':"\\|,.<>\/?]/.test(pass)) {
+      return { valid: false, message: 'A nova senha deve conter pelo menos um caractere especial (!@#$%...).' };
+    }
+    return { valid: true, message: '' };
+  };
+
+  const handleChangePassword = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setPasswordMsg({ text: '', type: '' });
+
+    if (!currentUser?.email) {
+      setPasswordMsg({ text: 'Sessão do usuário não identificada. Por favor, refaça o login.', type: 'error' });
+      return;
+    }
+
+    if (!currentPassword) {
+      setPasswordMsg({ text: 'Por favor, informe sua senha atual.', type: 'error' });
+      return;
+    }
+
+    if (newPassword !== confirmPassword) {
+      setPasswordMsg({ text: 'A confirmação de senha não confere com a nova senha digitada.', type: 'error' });
+      return;
+    }
+
+    if (currentPassword === newPassword) {
+      setPasswordMsg({ text: 'A nova senha deve ser diferente da senha atual.', type: 'error' });
+      return;
+    }
+
+    const validation = validateStrongPassword(newPassword);
+    if (!validation.valid) {
+      setPasswordMsg({ text: validation.message, type: 'error' });
+      return;
+    }
+
+    setChangingPassword(true);
+
+    try {
+      // 1. Reautenticação estrita para validar a senha atual informada pelo usuário
+      const { error: reauthError } = await supabase.auth.signInWithPassword({
+        email: currentUser.email,
+        password: currentPassword
+      });
+
+      if (reauthError) {
+        setPasswordMsg({ text: 'A senha atual informada está incorreta.', type: 'error' });
+        setChangingPassword(false);
+        return;
+      }
+
+      // 2. Atualização segura via Supabase Auth
+      const { error: updateError } = await supabase.auth.updateUser({
+        password: newPassword
+      });
+
+      if (updateError) {
+        throw updateError;
+      }
+
+      setPasswordMsg({ text: 'Senha alterada com sucesso! Utilize sua nova credencial no próximo acesso.', type: 'success' });
+      setCurrentPassword('');
+      setNewPassword('');
+      setConfirmPassword('');
+    } catch (err: any) {
+      setPasswordMsg({ text: err.message || 'Falha ao atualizar a senha.', type: 'error' });
+    } finally {
+      setChangingPassword(false);
     }
   };
 
@@ -2131,7 +2232,7 @@ const AdminDashboard: React.FC = () => {
                       <div className="flex items-start justify-between gap-3 mb-3">
                         <div>
                           <div className="text-[10px] font-black uppercase tracking-wider text-red-600 dark:text-red-400">
-                            Código: {loja.codigo || loja.slug || 'N/D'}
+                            Unidade Oficial
                           </div>
                           <h4 className="text-lg font-black text-gray-900 dark:text-white uppercase tracking-tight">
                             {loja.nome}
@@ -2151,11 +2252,16 @@ const AdminDashboard: React.FC = () => {
                       <div className="space-y-2 text-xs text-gray-600 dark:text-gray-300 pt-2 border-t border-gray-100 dark:border-gray-800">
                         <div className="flex items-center gap-2">
                           <MapPin className="h-3.5 w-3.5 text-gray-400 shrink-0" />
-                          <span>{loja.cidade ? `${loja.cidade} - ${loja.uf}` : 'Localidade não informada'}</span>
+                          <span>{loja.cidade ? `${loja.cidade} - ${loja.estado}` : 'Localidade não informada'}</span>
                         </div>
-                        {loja.endereco && (
-                          <div className="text-[11px] text-gray-400 pl-5 line-clamp-1">
-                            {loja.endereco}
+                        {loja.telefone_contato && (
+                          <div className="text-[11px] text-gray-400 pl-5">
+                            Tel: {loja.telefone_contato}
+                          </div>
+                        )}
+                        {loja.email_contato && (
+                          <div className="text-[11px] text-gray-400 pl-5">
+                            E-mail: {loja.email_contato}
                           </div>
                         )}
                         <div className="flex items-center gap-2">
@@ -2250,31 +2356,6 @@ const AdminDashboard: React.FC = () => {
 
                       <div className="space-y-1.5">
                         <label className="text-[10px] font-black uppercase tracking-widest text-gray-500 dark:text-gray-300">
-                          Código Identificador *
-                        </label>
-                        <input
-                          value={lojaFormData.codigo}
-                          onChange={(e) => setLojaFormData(prev => ({ ...prev, codigo: e.target.value }))}
-                          className="w-full px-4 py-3 rounded-xl border border-gray-200 dark:border-gray-700 dark:bg-gray-800 font-mono text-sm uppercase"
-                          placeholder="Ex: LOJA-01 ou MATRIZ"
-                          required
-                        />
-                      </div>
-
-                      <div className="space-y-1.5">
-                        <label className="text-[10px] font-black uppercase tracking-widest text-gray-500 dark:text-gray-300">
-                          Slug da URL
-                        </label>
-                        <input
-                          value={lojaFormData.slug}
-                          onChange={(e) => setLojaFormData(prev => ({ ...prev, slug: e.target.value }))}
-                          className="w-full px-4 py-3 rounded-xl border border-gray-200 dark:border-gray-700 dark:bg-gray-800 font-mono text-sm"
-                          placeholder="curitiba-matriz"
-                        />
-                      </div>
-
-                      <div className="space-y-1.5">
-                        <label className="text-[10px] font-black uppercase tracking-widest text-gray-500 dark:text-gray-300">
                           Cidade *
                         </label>
                         <input
@@ -2282,6 +2363,7 @@ const AdminDashboard: React.FC = () => {
                           onChange={(e) => setLojaFormData(prev => ({ ...prev, cidade: e.target.value }))}
                           className="w-full px-4 py-3 rounded-xl border border-gray-200 dark:border-gray-700 dark:bg-gray-800 font-bold"
                           placeholder="Ex: Curitiba"
+                          required
                         />
                       </div>
 
@@ -2290,33 +2372,22 @@ const AdminDashboard: React.FC = () => {
                           UF (Estado) *
                         </label>
                         <input
-                          value={lojaFormData.uf}
-                          onChange={(e) => setLojaFormData(prev => ({ ...prev, uf: e.target.value.toUpperCase() }))}
+                          value={lojaFormData.estado}
+                          onChange={(e) => setLojaFormData(prev => ({ ...prev, estado: e.target.value.toUpperCase() }))}
                           maxLength={2}
                           className="w-full px-4 py-3 rounded-xl border border-gray-200 dark:border-gray-700 dark:bg-gray-800 font-bold uppercase"
                           placeholder="PR"
-                        />
-                      </div>
-
-                      <div className="md:col-span-2 space-y-1.5">
-                        <label className="text-[10px] font-black uppercase tracking-widest text-gray-500 dark:text-gray-300">
-                          Endereço Completo
-                        </label>
-                        <input
-                          value={lojaFormData.endereco}
-                          onChange={(e) => setLojaFormData(prev => ({ ...prev, endereco: e.target.value }))}
-                          className="w-full px-4 py-3 rounded-xl border border-gray-200 dark:border-gray-700 dark:bg-gray-800 text-sm"
-                          placeholder="Rua / Av., Número, Bairro, CEP"
+                          required
                         />
                       </div>
 
                       <div className="space-y-1.5">
                         <label className="text-[10px] font-black uppercase tracking-widest text-gray-500 dark:text-gray-300">
-                          Telefone / WhatsApp
+                          Telefone de Contato
                         </label>
                         <input
-                          value={lojaFormData.telefone}
-                          onChange={(e) => setLojaFormData(prev => ({ ...prev, telefone: e.target.value }))}
+                          value={lojaFormData.telefone_contato}
+                          onChange={(e) => setLojaFormData(prev => ({ ...prev, telefone_contato: e.target.value }))}
                           className="w-full px-4 py-3 rounded-xl border border-gray-200 dark:border-gray-700 dark:bg-gray-800 text-sm"
                           placeholder="(41) 3000-0000"
                         />
@@ -2328,8 +2399,8 @@ const AdminDashboard: React.FC = () => {
                         </label>
                         <input
                           type="email"
-                          value={lojaFormData.email}
-                          onChange={(e) => setLojaFormData(prev => ({ ...prev, email: e.target.value }))}
+                          value={lojaFormData.email_contato}
+                          onChange={(e) => setLojaFormData(prev => ({ ...prev, email_contato: e.target.value }))}
                           className="w-full px-4 py-3 rounded-xl border border-gray-200 dark:border-gray-700 dark:bg-gray-800 text-sm"
                           placeholder="rh@gigantepneus.com.br"
                         />
@@ -2399,6 +2470,12 @@ const AdminDashboard: React.FC = () => {
                   className={`text-sm font-black uppercase tracking-widest pb-3 px-2 border-b-2 transition-all ${settingsSubTab === 'geral' ? 'border-red-600 text-red-600' : 'border-transparent text-gray-500 hover:text-gray-700'}`}
                 >
                   Configurações Gerais
+                </button>
+                <button
+                  onClick={() => setSettingsSubTab('seguranca')}
+                  className={`text-sm font-black uppercase tracking-widest pb-3 px-2 border-b-2 transition-all ${settingsSubTab === 'seguranca' ? 'border-red-600 text-red-600' : 'border-transparent text-gray-500 hover:text-gray-700'}`}
+                >
+                  Minha Conta & Segurança
                 </button>
                 <button
                   onClick={() => setSettingsSubTab('usuarios')}
@@ -2550,6 +2627,143 @@ const AdminDashboard: React.FC = () => {
                     </div>
                  </div>
               </div>
+            </div>
+          )}
+
+          {/* Sub-aba: MINHA CONTA & SEGURANÇA (ALTERAÇÃO DE SENHA) */}
+          {settingsSubTab === 'seguranca' && (
+            <div className="bg-white dark:bg-gray-900 p-8 sm:p-10 rounded-[3rem] border border-gray-100 dark:border-gray-800 shadow-xl w-full max-w-2xl space-y-8 animate-in fade-in duration-300">
+              <div className="border-b border-gray-100 dark:border-gray-800 pb-6 flex items-start justify-between gap-4">
+                <div>
+                  <div className="flex items-center gap-2 text-red-600 mb-1">
+                    <Shield className="h-5 w-5" />
+                    <span className="text-xs font-black uppercase tracking-widest">Segurança de Acesso</span>
+                  </div>
+                  <h3 className="font-black text-2xl text-gray-900 dark:text-white uppercase tracking-tighter">
+                    Alterar Minha Senha
+                  </h3>
+                  <p className="text-xs text-gray-500 dark:text-gray-400 mt-1 font-medium">
+                    Usuário autenticado: <strong className="text-gray-900 dark:text-white font-mono">{currentUser?.email || 'Sessão ativa'}</strong>
+                  </p>
+                </div>
+                <div className="p-3 bg-red-50 dark:bg-red-950/30 rounded-2xl text-red-600 shrink-0">
+                  <KeyRound className="h-6 w-6" />
+                </div>
+              </div>
+
+              {/* Informação sobre ausência de SMTP */}
+              <div className="p-4 bg-amber-50 dark:bg-amber-950/20 rounded-2xl border border-amber-200 dark:border-amber-900/30 text-amber-800 dark:text-amber-200 text-xs font-medium space-y-1">
+                <div className="font-black uppercase flex items-center gap-1.5">
+                  <AlertTriangle className="h-4 w-4" /> Informação de Segurança
+                </div>
+                <p>
+                  Por motivos de integridade e ausência de serviço SMTP ativo no momento, a alteração de credencial é realizada de forma imediata e autenticada no Supabase Auth.
+                </p>
+              </div>
+
+              <form onSubmit={handleChangePassword} className="space-y-6">
+                {/* Senha Atual */}
+                <div className="space-y-1.5">
+                  <label className="text-xs font-black uppercase tracking-widest text-gray-500 dark:text-gray-300">
+                    Senha Atual *
+                  </label>
+                  <div className="relative">
+                    <Lock className="absolute left-4 top-1/2 -translate-y-1/2 h-5 w-5 text-gray-400" />
+                    <input
+                      type={showCurrentPassword ? 'text' : 'password'}
+                      required
+                      value={currentPassword}
+                      onChange={e => setCurrentPassword(e.target.value)}
+                      className="w-full pl-12 pr-12 py-3.5 rounded-2xl border border-gray-200 dark:border-gray-800 dark:bg-gray-800 outline-none focus:ring-4 focus:ring-red-600/10 focus:border-red-600 font-bold text-sm dark:text-white"
+                      placeholder="Digite sua senha atual"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => setShowCurrentPassword(!showCurrentPassword)}
+                      className="absolute right-4 top-1/2 -translate-y-1/2 text-gray-400 hover:text-red-600 p-1"
+                    >
+                      {showCurrentPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                    </button>
+                  </div>
+                </div>
+
+                {/* Nova Senha */}
+                <div className="space-y-1.5">
+                  <label className="text-xs font-black uppercase tracking-widest text-gray-500 dark:text-gray-300">
+                    Nova Senha *
+                  </label>
+                  <div className="relative">
+                    <Lock className="absolute left-4 top-1/2 -translate-y-1/2 h-5 w-5 text-gray-400" />
+                    <input
+                      type={showNewPassword ? 'text' : 'password'}
+                      required
+                      value={newPassword}
+                      onChange={e => setNewPassword(e.target.value)}
+                      className="w-full pl-12 pr-12 py-3.5 rounded-2xl border border-gray-200 dark:border-gray-800 dark:bg-gray-800 outline-none focus:ring-4 focus:ring-red-600/10 focus:border-red-600 font-bold text-sm dark:text-white"
+                      placeholder="Mínimo de 8 caracteres com letras, números e símbolos"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => setShowNewPassword(!showNewPassword)}
+                      className="absolute right-4 top-1/2 -translate-y-1/2 text-gray-400 hover:text-red-600 p-1"
+                    >
+                      {showNewPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                    </button>
+                  </div>
+                </div>
+
+                {/* Confirmar Nova Senha */}
+                <div className="space-y-1.5">
+                  <label className="text-xs font-black uppercase tracking-widest text-gray-500 dark:text-gray-300">
+                    Confirmar Nova Senha *
+                  </label>
+                  <div className="relative">
+                    <Lock className="absolute left-4 top-1/2 -translate-y-1/2 h-5 w-5 text-gray-400" />
+                    <input
+                      type={showConfirmPassword ? 'text' : 'password'}
+                      required
+                      value={confirmPassword}
+                      onChange={e => setConfirmPassword(e.target.value)}
+                      className="w-full pl-12 pr-12 py-3.5 rounded-2xl border border-gray-200 dark:border-gray-800 dark:bg-gray-800 outline-none focus:ring-4 focus:ring-red-600/10 focus:border-red-600 font-bold text-sm dark:text-white"
+                      placeholder="Repita a nova senha exatamente igual"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => setShowConfirmPassword(!showConfirmPassword)}
+                      className="absolute right-4 top-1/2 -translate-y-1/2 text-gray-400 hover:text-red-600 p-1"
+                    >
+                      {showConfirmPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                    </button>
+                  </div>
+                </div>
+
+                {/* Regras da Senha Forte */}
+                <div className="p-4 bg-gray-50 dark:bg-gray-800/60 rounded-2xl border border-gray-100 dark:border-gray-800 text-[11px] text-gray-500 dark:text-gray-400 space-y-1.5">
+                  <div className="font-black uppercase tracking-wider text-gray-700 dark:text-gray-300">Requisitos da política de senha:</div>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-1 font-medium">
+                    <span className={newPassword.length >= 8 ? 'text-green-600 font-bold' : ''}>• No mínimo 8 caracteres</span>
+                    <span className={/[A-Z]/.test(newPassword) ? 'text-green-600 font-bold' : ''}>• Pelo menos 1 letra maiúscula</span>
+                    <span className={/[a-z]/.test(newPassword) ? 'text-green-600 font-bold' : ''}>• Pelo menos 1 letra minúscula</span>
+                    <span className={/[0-9]/.test(newPassword) ? 'text-green-600 font-bold' : ''}>• Pelo menos 1 número</span>
+                    <span className={/[!@#$%^&*()_+\-=\[\]{};':"\\|,.<>\/?]/.test(newPassword) ? 'text-green-600 font-bold' : ''}>• Pelo menos 1 símbolo (!@#$...)</span>
+                  </div>
+                </div>
+
+                {passwordMsg.text && (
+                  <div className={`p-4 rounded-2xl text-xs font-bold ${passwordMsg.type === 'error' ? 'bg-red-50 text-red-700 dark:bg-red-950/30 dark:text-red-300 border border-red-200 dark:border-red-900/30' : 'bg-green-50 text-green-700 dark:bg-green-950/30 dark:text-green-300 border border-green-200 dark:border-green-900/30'}`}>
+                    {passwordMsg.text}
+                  </div>
+                )}
+
+                <button
+                  type="submit"
+                  disabled={changingPassword || !currentPassword || !newPassword || !confirmPassword}
+                  className="w-full bg-red-600 hover:bg-red-700 text-white font-black uppercase py-4 rounded-2xl transition-all shadow-md active:scale-95 flex items-center justify-center gap-2 disabled:opacity-50"
+                >
+                  {changingPassword ? <Loader2 className="h-5 w-5 animate-spin" /> : <KeyRound className="h-5 w-5" />}
+                  Atualizar Senha
+                </button>
+              </form>
             </div>
           )}
 
