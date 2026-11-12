@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { supabase } from '../supabase';
 import { Candidato, ConfigItem, JobLandingContent, KPIStats, Pesquisa, Pergunta, TipoPergunta } from '../types';
 import { 
-  BarChart3, Users, ClipboardList, Sparkles, Briefcase, Settings,
+  BarChart3, Users, ClipboardList, Sparkles, Briefcase, Settings, Building2,
   Eye, Download, MapPin, X, Loader2, Plus, Trash2, TrendingUp, ShieldCheck, Calendar,
   Link2, Copy, CheckCheck, ChevronLeft, ToggleLeft, ToggleRight, FileText, Hash, AlignLeft, ListChecks, Star,
   Share2, ExternalLink, MessageCircle, Brain, Award, Zap, Check, AlertTriangle, ThumbsUp, ThumbsDown, RefreshCw
@@ -11,7 +11,31 @@ import { analyzeSurveyResponses, analyzeTalentCompatibility, listAvailableGemini
 import { createDefaultJobLanding, parseJobLandingFromRequisitos, serializeJobLanding, toLines } from '../jobsService';
 
 const AdminDashboard: React.FC = () => {
-  const [activeTab, setActiveTab] = useState<'overview' | 'talents' | 'surveys' | 'ai' | 'jobs' | 'settings'>('overview');
+  const [activeTab, setActiveTab] = useState<'overview' | 'talents' | 'surveys' | 'ai' | 'jobs' | 'lojas' | 'settings'>('overview');
+  
+  // Perfil e Autenticação do Usuário
+  const [currentUser, setCurrentUser] = useState<any>(null);
+  const [userRole, setUserRole] = useState<string>('');
+  const [userProfileLoading, setUserProfileLoading] = useState(true);
+  const isGestorMaster = userRole === 'franqueadora_admin';
+
+  // Gestão de Unidades (Lojas)
+  const [lojasList, setLojasList] = useState<any[]>([]);
+  const [lojaModalOpen, setLojaModalOpen] = useState(false);
+  const [editingLoja, setEditingLoja] = useState<any | null>(null);
+  const [lojaFormData, setLojaFormData] = useState({
+    nome: '',
+    cidade: '',
+    estado: 'SP',
+    email_contato: '',
+    telefone_contato: '',
+    ativa: true
+  });
+  const [savingLoja, setSavingLoja] = useState(false);
+  const [lojaMsg, setLojaMsg] = useState({ text: '', type: '' });
+
+  // Unidade Vinculada ao Cargo / Vaga
+  const [selectedJobLojaId, setSelectedJobLojaId] = useState<string>('');
   
   const [candidatos, setCandidatos] = useState<Candidato[]>([]);
   const [loading, setLoading] = useState(true);
@@ -92,6 +116,31 @@ const AdminDashboard: React.FC = () => {
   const [newUserPassword, setNewUserPassword] = useState('');
   const [creatingUser, setCreatingUser] = useState(false);
   const [userMsg, setUserMsg] = useState({ text: '', type: '' });
+
+  useEffect(() => {
+    const checkAuthAndProfile = async () => {
+      setUserProfileLoading(true);
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session?.user) {
+        setUserProfileLoading(false);
+        return;
+      }
+      setCurrentUser(session.user);
+      
+      const { data: perfil } = await supabase
+        .from('perfis')
+        .select('id, role, ativo')
+        .eq('id', session.user.id)
+        .maybeSingle();
+
+      if (perfil) {
+        setUserRole(perfil.role || '');
+      }
+      setUserProfileLoading(false);
+    };
+
+    checkAuthAndProfile();
+  }, []);
 
   useEffect(() => {
     fetchData();
@@ -259,15 +308,16 @@ const AdminDashboard: React.FC = () => {
     // Consulta de Lojas e Cargos compatível com o schema v1.3.9
     try {
       const [lojasRes, cargosRes] = await Promise.all([
-        supabase.from('lojas_publicas').select('id, nome, cidade, estado').order('cidade'),
-        supabase.from('cargos').select('id, titulo, requisitos, ativo, publicada, criado_em').order('titulo')
+        supabase.from('lojas').select('*').order('nome'),
+        supabase.from('cargos').select('id, titulo, departamento, tipo_vaga, requisitos, ativo, publicada, loja_id, criado_em').order('titulo')
       ]);
 
       if (lojasRes.data) {
+        setLojasList(lojasRes.data);
         const mappedCidades: ConfigItem[] = lojasRes.data.map((l: any) => ({
           id: l.id,
           nome: `${l.cidade} - ${l.estado} (${l.nome})`,
-          created_at: new Date().toISOString()
+          created_at: l.criado_em || new Date().toISOString()
         }));
         setCidades(mappedCidades);
       }
@@ -280,6 +330,7 @@ const AdminDashboard: React.FC = () => {
           requisitos: c.requisitos,
           ativo: c.ativo,
           publicada: c.publicada,
+          loja_id: c.loja_id,
           created_at: c.criado_em || new Date().toISOString()
         }));
         setCargos(mappedCargos);
@@ -324,55 +375,136 @@ const AdminDashboard: React.FC = () => {
     setLoading(false);
   };
 
-  const handleAddItem = async (table: 'cidades' | 'cargos') => {
-    if (!newItem) return;
-    if (table === 'cidades') {
-      // No schema v1.3.9, unidades são gerenciadas via tabela lojas
-      const { error } = await supabase.from('lojas').insert([{ nome: newItem, cidade: newItem, estado: 'SP' }]);
-      if (!error) {
-        setNewItem('');
-        fetchData();
+  // === GESTÃO DE UNIDADES (LOJAS) ===
+  const openCreateLojaModal = () => {
+    setEditingLoja(null);
+    setLojaFormData({
+      nome: '',
+      cidade: '',
+      estado: 'SP',
+      email_contato: '',
+      telefone_contato: '',
+      ativa: true
+    });
+    setLojaMsg({ text: '', type: '' });
+    setLojaModalOpen(true);
+  };
+
+  const openEditLojaModal = (loja: any) => {
+    setEditingLoja(loja);
+    setLojaFormData({
+      nome: loja.nome || '',
+      cidade: loja.cidade || '',
+      estado: loja.estado || 'SP',
+      email_contato: loja.email_contato || '',
+      telefone_contato: loja.telefone_contato || '',
+      ativa: loja.ativa ?? true
+    });
+    setLojaMsg({ text: '', type: '' });
+    setLojaModalOpen(true);
+  };
+
+  const handleSaveLoja = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!lojaFormData.nome.trim() || !lojaFormData.cidade.trim() || !lojaFormData.estado.trim()) {
+      setLojaMsg({ text: 'Informe ao menos o nome da unidade, cidade e estado.', type: 'error' });
+      return;
+    }
+    setSavingLoja(true);
+    setLojaMsg({ text: '', type: '' });
+
+    try {
+      if (editingLoja) {
+        const { error } = await supabase
+          .from('lojas')
+          .update({
+            nome: lojaFormData.nome.trim(),
+            cidade: lojaFormData.cidade.trim(),
+            estado: lojaFormData.estado.trim().toUpperCase(),
+            email_contato: lojaFormData.email_contato.trim() || null,
+            telefone_contato: lojaFormData.telefone_contato.trim() || null,
+            ativa: lojaFormData.ativa
+          })
+          .eq('id', editingLoja.id);
+
+        if (error) throw error;
+        setLojaMsg({ text: 'Unidade atualizada com sucesso!', type: 'success' });
+      } else {
+        const { error } = await supabase
+          .from('lojas')
+          .insert([{
+            nome: lojaFormData.nome.trim(),
+            cidade: lojaFormData.cidade.trim(),
+            estado: lojaFormData.estado.trim().toUpperCase(),
+            email_contato: lojaFormData.email_contato.trim() || null,
+            telefone_contato: lojaFormData.telefone_contato.trim() || null,
+            ativa: true
+          }]);
+
+        if (error) throw error;
+        setLojaMsg({ text: 'Unidade cadastrada com sucesso!', type: 'success' });
       }
-    } else {
-      const { error } = await supabase.from('cargos').insert([{ titulo: newItem, ativo: true, publicada: true }]);
-      if (!error) {
-        setNewItem('');
-        fetchData();
-      }
+
+      setLojaModalOpen(false);
+      setEditingLoja(null);
+      fetchData();
+    } catch (err: any) {
+      setLojaMsg({ text: err?.message || 'Falha ao salvar unidade. Verifique se possui permissão de Gestor Master.', type: 'error' });
+    } finally {
+      setSavingLoja(false);
     }
   };
 
-  const handleDeleteItem = async (table: 'cidades' | 'cargos', id: string) => {
-    const targetTable = table === 'cidades' ? 'lojas' : 'cargos';
-    const { error } = await supabase.from(targetTable).delete().eq('id', id);
-    if (!error) fetchData();
+  const handleToggleLojaStatus = async (loja: any) => {
+    const newStatus = !loja.ativa;
+    const actionLabel = newStatus ? 'reativar' : 'desativar';
+    if (!window.confirm(`Deseja realmente ${actionLabel} a unidade "${loja.nome}"?`)) {
+      return;
+    }
+
+    const { error } = await supabase
+      .from('lojas')
+      .update({ ativa: newStatus })
+      .eq('id', loja.id);
+
+    if (error) {
+      alert(`Erro ao alterar status da unidade: ${error.message}`);
+      return;
+    }
+    fetchData();
   };
 
-  const openJobEditor = (cargo: ConfigItem) => {
+  // === GESTÃO DE VAGAS ===
+  const openJobEditor = (cargo: any) => {
     setCreatingJob(false);
-    setNewJobName(cargo.nome);
+    setNewJobName(cargo.nome || cargo.titulo);
     setEditingCargoId(cargo.id);
-    setJobLanding(parseJobLandingFromRequisitos(cargo));
+    setSelectedJobLojaId(cargo.loja_id || '');
+    const parsed = parseJobLandingFromRequisitos(cargo);
+    parsed.published = cargo.publicada === true;
+    setJobLanding(parsed);
     setJobEditorOpen(true);
   };
 
   const openCreateJobModal = () => {
-    const baseName = 'Analista Comercial';
+    const baseName = 'Consultor de Vendas Técnicas';
     const template = createDefaultJobLanding(baseName);
     setCreatingJob(true);
     setEditingCargoId('');
     setNewJobName(baseName);
+    setSelectedJobLojaId('');
     setJobLanding({
       ...template,
-      title: 'Analista Comercial - Equipamentos Medicos',
-      location: 'Ribeirao Preto - SP',
+      title: 'Consultor de Vendas Técnicas - Centro Automotivo',
+      location: 'A combinar',
       workModel: 'Presencial',
-      shortDescription: 'Atue no relacionamento com clientes do setor da saude, apoiando projetos e propostas comerciais com foco em impacto real.',
-      salary: 'Faixa a combinar + variavel',
-      benefits: ['Vale alimentacao', 'Plano de saude', 'Vale transporte', 'Seguro de vida'],
-      responsibilities: ['Atender carteira de clientes e novos leads', 'Apoiar propostas tecnicas e comerciais', 'Atuar em rotinas de CRM e follow-up'],
-      requirements: ['Experiencia com vendas consultivas', 'Boa comunicacao e organizacao', 'Desejavel experiencia no segmento de saude'],
-      agentContext: 'Priorizar candidatos com perfil consultivo, capacidade de comunicacao e historico de estabilidade profissional. Descartar candidatos sem aderencia ao atendimento B2B.'
+      shortDescription: 'Atue no atendimento consultivo e comercial da Gigante Pneus, oferecendo soluções de alta qualidade em pneus, geometria 3D e serviços automotivos.',
+      salary: 'A combinar',
+      benefits: ['Comissões atrativas', 'Vale Refeição', 'Vale Transporte', 'Plano Odontológico', 'Seguro de Vida'],
+      responsibilities: ['Atendimento consultivo e técnico ao cliente', 'Venda de pneus e serviços automotivos especializados', 'Elaboração e negociação de orçamentos', 'Acompanhamento do pós-venda e satisfação'],
+      requirements: ['Ensino Médio completo', 'Experiência prévia em vendas ou centros automotivos', 'Boa comunicação interpessoal', 'CNH categoria B'],
+      agentContext: 'Priorizar candidatos com boa comunicação, experiência prévia em centros automotivos ou revendas de pneus e perfil de negociação.',
+      published: false // RASCUNHO POR PADRÃO!
     });
     setJobEditorOpen(true);
   };
@@ -399,9 +531,10 @@ const AdminDashboard: React.FC = () => {
         .from('cargos')
         .insert([{ 
           titulo: newJobName.trim() || payload.title, 
+          loja_id: selectedJobLojaId || null,
           requisitos: serialized,
           ativo: true,
-          publicada: true
+          publicada: jobLanding.published === true
         }]);
       error = insertRes.error;
     } else {
@@ -409,7 +542,9 @@ const AdminDashboard: React.FC = () => {
         .from('cargos')
         .update({ 
           titulo: newJobName.trim() || payload.title, 
-          requisitos: serialized 
+          loja_id: selectedJobLojaId || null,
+          requisitos: serialized,
+          publicada: jobLanding.published === true
         })
         .eq('id', editingCargoId);
       error = updateRes.error;
@@ -417,13 +552,37 @@ const AdminDashboard: React.FC = () => {
 
     setSavingJob(false);
     if (error) {
-      alert('Nao foi possivel salvar a vaga.');
+      alert('Não foi possível salvar a vaga: ' + error.message);
       return;
     }
     setJobEditorOpen(false);
     setEditingCargoId('');
     setCreatingJob(false);
     setNewJobName('');
+    fetchData();
+  };
+
+  const handleTogglePublish = async (cargo: any) => {
+    const newPublished = !cargo.publicada;
+    let serialized = cargo.requisitos;
+    try {
+      const parsed = typeof cargo.requisitos === 'string' ? JSON.parse(cargo.requisitos) : (cargo.requisitos || {});
+      parsed.published = newPublished;
+      serialized = JSON.stringify(parsed);
+    } catch {}
+
+    const { error } = await supabase
+      .from('cargos')
+      .update({
+        publicada: newPublished,
+        requisitos: serialized
+      })
+      .eq('id', cargo.id);
+
+    if (error) {
+      alert(`Não foi possível alterar o status de publicação da vaga: ${error.message}`);
+      return;
+    }
     fetchData();
   };
 
@@ -758,6 +917,11 @@ const AdminDashboard: React.FC = () => {
           <h2 className="text-xl font-black text-gray-900 dark:text-white uppercase tracking-tighter leading-none">
             RH <span className="text-red-600">WORKSPACE</span>
           </h2>
+          <div className="mt-3">
+            <span className={`inline-flex items-center text-[10px] font-black uppercase tracking-wider px-2.5 py-1 rounded-lg ${isGestorMaster ? 'bg-red-600 text-white' : 'bg-gray-100 dark:bg-gray-800 text-gray-700 dark:text-gray-300'}`}>
+              {isGestorMaster ? 'Gestor Master' : (userRole === 'rh_corporativo' ? 'RH Corporativo' : (userRole || 'Usuário RH'))}
+            </span>
+          </div>
         </div>
         
         <nav className="flex-1 py-4 space-y-1">
@@ -766,6 +930,7 @@ const AdminDashboard: React.FC = () => {
           <SidebarItem id="surveys" label="Pesquisas Internas" icon={<ClipboardList className="h-5 w-5" />} />
           <SidebarItem id="ai" label="Análise de IA" icon={<Sparkles className="h-5 w-5" />} />
           <SidebarItem id="jobs" label="Mural de Vagas" icon={<Briefcase className="h-5 w-5" />} />
+          <SidebarItem id="lojas" label="Rede de Unidades" icon={<Building2 className="h-5 w-5" />} />
         </nav>
 
         <div className="border-t border-gray-100 dark:border-gray-800 py-4">
@@ -1740,22 +1905,40 @@ const AdminDashboard: React.FC = () => {
               <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
                 {cargos.map((cargo) => {
                   const landing = parseJobLandingFromRequisitos(cargo);
+                  const lojaAssoc = lojasList.find(l => l.id === cargo.loja_id);
+                  const isPublished = cargo.publicada === true || landing.published === true;
                   return (
                     <div key={cargo.id} className="bg-white dark:bg-gray-900 rounded-3xl p-6 border border-gray-100 dark:border-gray-800 shadow-lg space-y-4">
                       <div className="flex items-start justify-between gap-3">
-                        <div>
+                        <div className="space-y-1">
                           <h4 className="text-lg font-black text-gray-900 dark:text-white uppercase tracking-tight">{landing.title}</h4>
-                          <p className="text-xs text-gray-500 dark:text-gray-400 font-bold uppercase">Cargo base: {cargo.nome}</p>
+                          <div className="flex flex-wrap items-center gap-2">
+                            <span className="text-xs text-gray-500 dark:text-gray-400 font-bold uppercase">Cargo: {cargo.nome}</span>
+                            <span className="text-xs text-gray-300 dark:text-gray-600">•</span>
+                            <span className="text-xs font-black uppercase text-red-600 dark:text-red-400 bg-red-50 dark:bg-red-950/30 px-2.5 py-0.5 rounded-lg border border-red-100 dark:border-red-900/30">
+                              {lojaAssoc ? lojaAssoc.nome : 'Rede / Corporativo'}
+                            </span>
+                          </div>
                         </div>
-                        <span className={`px-3 py-1 rounded-full text-[10px] font-black uppercase ${landing.published ? 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-300' : 'bg-gray-100 text-gray-600 dark:bg-gray-800 dark:text-gray-300'}`}>
-                          {landing.published ? 'Publicada' : 'Rascunho'}
+                        <span className={`px-3 py-1 rounded-full text-[10px] font-black uppercase ${isPublished ? 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-300' : 'bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-300'}`}>
+                          {isPublished ? 'Publicada' : 'Rascunho'}
                         </span>
                       </div>
                       <p className="text-sm text-gray-600 dark:text-gray-300 line-clamp-2">{landing.shortDescription}</p>
-                      <div className="flex items-center gap-2">
-                        <button onClick={() => openJobEditor(cargo)} className="bg-red-600 hover:bg-red-700 text-white px-4 py-2 rounded-xl text-xs font-black uppercase">Criar/Editar LP</button>
-                        {landing.published && (
-                          <a href={`#/vagas/${landing.slug}`} target="_blank" rel="noreferrer" className="bg-gray-100 dark:bg-gray-800 text-gray-700 dark:text-gray-200 px-4 py-2 rounded-xl text-xs font-black uppercase">Saiba mais</a>
+                      <div className="flex flex-wrap items-center gap-2 pt-2 border-t border-gray-100 dark:border-gray-800">
+                        <button onClick={() => openJobEditor(cargo)} className="bg-red-600 hover:bg-red-700 text-white px-3.5 py-2 rounded-xl text-xs font-black uppercase transition-all">
+                          Editar Vaga
+                        </button>
+                        <button
+                          onClick={() => handleTogglePublish(cargo)}
+                          className={`px-3.5 py-2 rounded-xl text-xs font-black uppercase transition-all border ${isPublished ? 'border-amber-300 text-amber-700 hover:bg-amber-50 dark:hover:bg-amber-950/30' : 'border-green-300 text-green-700 hover:bg-green-50 dark:hover:bg-green-950/30'}`}
+                        >
+                          {isPublished ? 'Mudar p/ Rascunho' : 'Publicar Vaga'}
+                        </button>
+                        {isPublished && (
+                          <a href={`#/vagas/${cargo.id}`} target="_blank" rel="noreferrer" className="bg-gray-100 dark:bg-gray-800 text-gray-700 dark:text-gray-200 px-3.5 py-2 rounded-xl text-xs font-black uppercase flex items-center gap-1">
+                            <ExternalLink className="h-3.5 w-3.5" /> Ver LP
+                          </a>
                         )}
                         <div className="ml-auto">
                           {confirmDeleteJobId === cargo.id ? (
@@ -1804,9 +1987,24 @@ const AdminDashboard: React.FC = () => {
                     </div>
 
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                      <div className="md:col-span-2 space-y-1.5">
+                      <div className="space-y-1.5">
                         <label className="text-[10px] font-black uppercase tracking-widest text-gray-500 dark:text-gray-300">Nome Interno da Vaga</label>
-                        <input value={newJobName} onChange={(e) => setNewJobName(e.target.value)} className="w-full px-4 py-3 rounded-xl border border-gray-200 dark:border-gray-700 dark:bg-gray-800" placeholder="Ex: Analista Comercial" />
+                        <input value={newJobName} onChange={(e) => setNewJobName(e.target.value)} className="w-full px-4 py-3 rounded-xl border border-gray-200 dark:border-gray-700 dark:bg-gray-800" placeholder="Ex: Consultor de Vendas Técnicas" />
+                      </div>
+                      <div className="space-y-1.5">
+                        <label className="text-[10px] font-black uppercase tracking-widest text-gray-500 dark:text-gray-300">Unidade / Loja Vinculada</label>
+                        <select
+                          value={selectedJobLojaId}
+                          onChange={(e) => setSelectedJobLojaId(e.target.value)}
+                          className="w-full px-4 py-3 rounded-xl border border-gray-200 dark:border-gray-700 dark:bg-gray-800 font-bold cursor-pointer"
+                        >
+                          <option value="">Rede / Corporativo (Todas as Lojas)</option>
+                          {lojasList.map((loja) => (
+                            <option key={loja.id} value={loja.id}>
+                              {loja.nome} {loja.cidade ? `(${loja.cidade} - ${loja.uf})` : ''} {!loja.ativa ? ' [INATIVA]' : ''}
+                            </option>
+                          ))}
+                        </select>
                       </div>
                       <div className="space-y-1.5">
                         <label className="text-[10px] font-black uppercase tracking-widest text-gray-500 dark:text-gray-300">Titulo da LP</label>
@@ -1818,7 +2016,7 @@ const AdminDashboard: React.FC = () => {
                       </div>
                       <div className="space-y-1.5">
                         <label className="text-[10px] font-black uppercase tracking-widest text-gray-500 dark:text-gray-300">Slug da URL</label>
-                        <input value={jobLanding.slug} onChange={(e) => setJobLanding(prev => ({ ...prev, slug: e.target.value }))} className="w-full px-4 py-3 rounded-xl border border-gray-200 dark:border-gray-700 dark:bg-gray-800" placeholder="analista-comercial" />
+                        <input value={jobLanding.slug} onChange={(e) => setJobLanding(prev => ({ ...prev, slug: e.target.value }))} className="w-full px-4 py-3 rounded-xl border border-gray-200 dark:border-gray-700 dark:bg-gray-800" placeholder="consultor-vendas-tecnicas" />
                       </div>
                       <div className="space-y-1.5">
                         <label className="text-[10px] font-black uppercase tracking-widest text-gray-500 dark:text-gray-300">Local</label>
@@ -1828,9 +2026,9 @@ const AdminDashboard: React.FC = () => {
                         <label className="text-[10px] font-black uppercase tracking-widest text-gray-500 dark:text-gray-300">Modelo de Trabalho</label>
                         <input value={jobLanding.workModel} onChange={(e) => setJobLanding(prev => ({ ...prev, workModel: e.target.value }))} className="w-full px-4 py-3 rounded-xl border border-gray-200 dark:border-gray-700 dark:bg-gray-800" placeholder="Presencial, Hibrido ou Remoto" />
                       </div>
-                      <div className="md:col-span-2 space-y-1.5">
+                      <div className="space-y-1.5">
                         <label className="text-[10px] font-black uppercase tracking-widest text-gray-500 dark:text-gray-300">Faixa Salarial</label>
-                        <input value={jobLanding.salary} onChange={(e) => setJobLanding(prev => ({ ...prev, salary: e.target.value }))} className="w-full px-4 py-3 rounded-xl border border-gray-200 dark:border-gray-700 dark:bg-gray-800" placeholder="Ex: R$ 4.000 a R$ 5.500 + variavel" />
+                        <input value={jobLanding.salary} onChange={(e) => setJobLanding(prev => ({ ...prev, salary: e.target.value }))} className="w-full px-4 py-3 rounded-xl border border-gray-200 dark:border-gray-700 dark:bg-gray-800" placeholder="Ex: A combinar / Fixo + Comissoes" />
                       </div>
                     </div>
 
@@ -1855,13 +2053,334 @@ const AdminDashboard: React.FC = () => {
                       <textarea rows={4} value={jobLanding.agentContext} onChange={(e) => setJobLanding(prev => ({ ...prev, agentContext: e.target.value }))} className="w-full px-4 py-3 rounded-xl border border-gray-200 dark:border-gray-700 dark:bg-gray-800" placeholder="Criterios de descarte, competencias obrigatorias, perfil ideal etc." />
                     </div>
 
-                    <label className="inline-flex items-center gap-2 text-sm font-bold text-gray-700 dark:text-gray-200">
-                      <input type="checkbox" checked={jobLanding.published} onChange={(e) => setJobLanding(prev => ({ ...prev, published: e.target.checked }))} /> Publicar esta vaga no portal
-                    </label>
+                    <div className="flex items-center justify-between p-4 bg-gray-50 dark:bg-gray-800/60 rounded-2xl border border-gray-200 dark:border-gray-700">
+                      <div>
+                        <div className="text-sm font-black text-gray-900 dark:text-white uppercase tracking-tight">Status de Publicação</div>
+                        <div className="text-xs text-gray-500 dark:text-gray-400">
+                          {jobLanding.published ? 'A vaga ficará imediatamente visível no portal público.' : 'A vaga ficará salva como Rascunho, oculta no portal público.'}
+                        </div>
+                      </div>
+                      <label className="relative inline-flex items-center cursor-pointer">
+                        <input
+                          type="checkbox"
+                          checked={jobLanding.published}
+                          onChange={(e) => setJobLanding(prev => ({ ...prev, published: e.target.checked }))}
+                          className="sr-only peer"
+                        />
+                        <div className="w-11 h-6 bg-gray-200 peer-focus:outline-none rounded-full peer dark:bg-gray-700 peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all dark:border-gray-600 peer-checked:bg-red-600"></div>
+                      </label>
+                    </div>
 
                     <div className="flex justify-end gap-3">
                       <button onClick={() => setJobEditorOpen(false)} className="px-4 py-2 rounded-xl bg-gray-100 dark:bg-gray-800 text-gray-700 dark:text-gray-200 text-xs font-black uppercase">Cancelar</button>
                       <button onClick={handleSaveJobLanding} disabled={savingJob} className="px-5 py-2 rounded-xl bg-red-600 text-white text-xs font-black uppercase disabled:opacity-60">{savingJob ? 'Salvando...' : 'Salvar Vaga'}</button>
+                    </div>
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* Aba: GESTÃO DE UNIDADES (LOJAS) */}
+          {activeTab === 'lojas' && (
+            <div className="space-y-8 animate-in fade-in duration-500">
+              <div className="bg-white dark:bg-gray-900 rounded-[2.5rem] p-8 border border-gray-100 dark:border-gray-800 shadow-xl flex flex-col md:flex-row md:items-center md:justify-between gap-6">
+                <div className="space-y-1">
+                  <div className="flex items-center gap-3">
+                    <div className="p-3 bg-red-50 dark:bg-red-950/30 rounded-2xl text-red-600">
+                      <Building2 className="h-6 w-6" />
+                    </div>
+                    <div>
+                      <h3 className="text-2xl font-black text-gray-900 dark:text-white uppercase tracking-tighter">Unidades e Lojas</h3>
+                      <p className="text-gray-600 dark:text-gray-300 text-sm font-medium">
+                        Gerencie as filiais da Gigante Pneus e vincule pastas dedicadas no Google Drive para armazenamento seguro dos currículos.
+                      </p>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="flex flex-wrap items-center gap-3">
+                  {isGestorMaster ? (
+                    <button
+                      onClick={openCreateLojaModal}
+                      className="inline-flex items-center gap-2 bg-red-600 hover:bg-red-700 text-white px-5 py-3 rounded-2xl text-xs font-black uppercase shadow-lg transition-all active:scale-95"
+                    >
+                      <Plus className="h-4 w-4" /> Cadastrar Nova Unidade
+                    </button>
+                  ) : (
+                    <div className="text-xs font-bold text-gray-400 bg-gray-100 dark:bg-gray-800 px-4 py-2.5 rounded-xl border border-gray-200 dark:border-gray-700">
+                      Permissão exclusiva do Gestor Master (franqueadora_admin)
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              {/* Grid de Unidades */}
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                {lojasList.map((loja) => {
+                  const vagasCount = cargos.filter(c => c.loja_id === loja.id).length;
+                  return (
+                    <div
+                      key={loja.id}
+                      className={`bg-white dark:bg-gray-900 rounded-3xl p-6 border transition-all ${
+                        loja.ativa
+                          ? 'border-gray-100 dark:border-gray-800 shadow-lg hover:shadow-xl'
+                          : 'border-dashed border-gray-300 dark:border-gray-700 opacity-60 bg-gray-50/50 dark:bg-gray-900/40'
+                      }`}
+                    >
+                      <div className="flex items-start justify-between gap-3 mb-3">
+                        <div>
+                          <div className="text-[10px] font-black uppercase tracking-wider text-red-600 dark:text-red-400">
+                            Código: {loja.codigo || loja.slug || 'N/D'}
+                          </div>
+                          <h4 className="text-lg font-black text-gray-900 dark:text-white uppercase tracking-tight">
+                            {loja.nome}
+                          </h4>
+                        </div>
+                        <span
+                          className={`px-3 py-1 rounded-full text-[10px] font-black uppercase ${
+                            loja.ativa
+                              ? 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-300'
+                              : 'bg-gray-200 text-gray-700 dark:bg-gray-800 dark:text-gray-400'
+                          }`}
+                        >
+                          {loja.ativa ? 'Ativa' : 'Inativa'}
+                        </span>
+                      </div>
+
+                      <div className="space-y-2 text-xs text-gray-600 dark:text-gray-300 pt-2 border-t border-gray-100 dark:border-gray-800">
+                        <div className="flex items-center gap-2">
+                          <MapPin className="h-3.5 w-3.5 text-gray-400 shrink-0" />
+                          <span>{loja.cidade ? `${loja.cidade} - ${loja.uf}` : 'Localidade não informada'}</span>
+                        </div>
+                        {loja.endereco && (
+                          <div className="text-[11px] text-gray-400 pl-5 line-clamp-1">
+                            {loja.endereco}
+                          </div>
+                        )}
+                        <div className="flex items-center gap-2">
+                          <Briefcase className="h-3.5 w-3.5 text-gray-400 shrink-0" />
+                          <span>{vagasCount} {vagasCount === 1 ? 'vaga vinculada' : 'vagas vinculadas'}</span>
+                        </div>
+                        <div className="flex items-center gap-2 text-[11px]">
+                          <Folder className="h-3.5 w-3.5 text-gray-400 shrink-0" />
+                          <span className="font-mono text-gray-400 truncate">
+                            {loja.google_drive_folder_id ? `Drive: ${loja.google_drive_folder_id.slice(0, 14)}...` : 'Drive: Raiz da Organização'}
+                          </span>
+                        </div>
+                      </div>
+
+                      {isGestorMaster && (
+                        <div className="flex items-center gap-2 pt-4 mt-4 border-t border-gray-100 dark:border-gray-800">
+                          <button
+                            onClick={() => openEditLojaModal(loja)}
+                            className="bg-gray-100 dark:bg-gray-800 hover:bg-gray-200 dark:hover:bg-gray-700 text-gray-800 dark:text-gray-200 px-3.5 py-2 rounded-xl text-xs font-black uppercase transition-all"
+                          >
+                            Editar
+                          </button>
+                          <button
+                            onClick={() => handleToggleLojaStatus(loja)}
+                            className={`px-3.5 py-2 rounded-xl text-xs font-black uppercase transition-all border ${
+                              loja.ativa
+                                ? 'border-amber-300 text-amber-700 hover:bg-amber-50 dark:hover:bg-amber-950/30'
+                                : 'border-green-300 text-green-700 hover:bg-green-50 dark:hover:bg-green-950/30'
+                            }`}
+                          >
+                            {loja.ativa ? 'Desativar' : 'Reativar'}
+                          </button>
+                        </div>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+
+              {lojasList.length === 0 && (
+                <div className="text-center py-16 bg-white dark:bg-gray-900 rounded-[2.5rem] border border-gray-100 dark:border-gray-800">
+                  <Building2 className="h-12 w-12 text-gray-300 dark:text-gray-600 mx-auto mb-3" />
+                  <p className="text-gray-500 font-bold uppercase text-sm">Nenhuma unidade cadastrada no sistema.</p>
+                </div>
+              )}
+
+              {/* Modal de Cadastro / Edição de Loja */}
+              {lojaModalOpen && (
+                <div className="fixed inset-0 z-[70] bg-black/70 backdrop-blur-sm p-4 flex items-center justify-center animate-in fade-in duration-200">
+                  <div className="w-full max-w-2xl max-h-[90vh] overflow-y-auto bg-white dark:bg-gray-900 rounded-[2.5rem] p-8 border border-gray-100 dark:border-gray-800 space-y-6 shadow-2xl">
+                    <div className="flex items-center justify-between pb-4 border-b border-gray-100 dark:border-gray-800">
+                      <div className="flex items-center gap-3">
+                        <div className="p-3 bg-red-50 dark:bg-red-950/30 rounded-2xl text-red-600">
+                          <Building2 className="h-6 w-6" />
+                        </div>
+                        <div>
+                          <h4 className="text-xl font-black text-gray-900 dark:text-white uppercase tracking-tight">
+                            {editingLoja ? 'Editar Unidade' : 'Cadastrar Nova Unidade'}
+                          </h4>
+                          <p className="text-xs text-gray-500 font-bold uppercase">
+                            Exclusivo para Gestor Master (franqueadora_admin)
+                          </p>
+                        </div>
+                      </div>
+                      <button
+                        onClick={() => setLojaModalOpen(false)}
+                        className="p-2 rounded-xl text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-800"
+                      >
+                        <X className="h-5 w-5" />
+                      </button>
+                    </div>
+
+                    {lojaMsg && (
+                      <div className={`p-4 rounded-2xl text-xs font-bold ${lojaMsg.type === 'error' ? 'bg-red-50 text-red-700 dark:bg-red-950/30 dark:text-red-300 border border-red-200 dark:border-red-900/30' : 'bg-green-50 text-green-700 dark:bg-green-950/30 dark:text-green-300 border border-green-200 dark:border-green-900/30'}`}>
+                        {lojaMsg.text}
+                      </div>
+                    )}
+
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                      <div className="md:col-span-2 space-y-1.5">
+                        <label className="text-[10px] font-black uppercase tracking-widest text-gray-500 dark:text-gray-300">
+                          Nome da Unidade / Loja *
+                        </label>
+                        <input
+                          value={lojaFormData.nome}
+                          onChange={(e) => setLojaFormData(prev => ({ ...prev, nome: e.target.value }))}
+                          className="w-full px-4 py-3 rounded-xl border border-gray-200 dark:border-gray-700 dark:bg-gray-800 font-bold"
+                          placeholder="Ex: Gigante Pneus - Matriz Curitiba"
+                          required
+                        />
+                      </div>
+
+                      <div className="space-y-1.5">
+                        <label className="text-[10px] font-black uppercase tracking-widest text-gray-500 dark:text-gray-300">
+                          Código Identificador *
+                        </label>
+                        <input
+                          value={lojaFormData.codigo}
+                          onChange={(e) => setLojaFormData(prev => ({ ...prev, codigo: e.target.value }))}
+                          className="w-full px-4 py-3 rounded-xl border border-gray-200 dark:border-gray-700 dark:bg-gray-800 font-mono text-sm uppercase"
+                          placeholder="Ex: LOJA-01 ou MATRIZ"
+                          required
+                        />
+                      </div>
+
+                      <div className="space-y-1.5">
+                        <label className="text-[10px] font-black uppercase tracking-widest text-gray-500 dark:text-gray-300">
+                          Slug da URL
+                        </label>
+                        <input
+                          value={lojaFormData.slug}
+                          onChange={(e) => setLojaFormData(prev => ({ ...prev, slug: e.target.value }))}
+                          className="w-full px-4 py-3 rounded-xl border border-gray-200 dark:border-gray-700 dark:bg-gray-800 font-mono text-sm"
+                          placeholder="curitiba-matriz"
+                        />
+                      </div>
+
+                      <div className="space-y-1.5">
+                        <label className="text-[10px] font-black uppercase tracking-widest text-gray-500 dark:text-gray-300">
+                          Cidade *
+                        </label>
+                        <input
+                          value={lojaFormData.cidade}
+                          onChange={(e) => setLojaFormData(prev => ({ ...prev, cidade: e.target.value }))}
+                          className="w-full px-4 py-3 rounded-xl border border-gray-200 dark:border-gray-700 dark:bg-gray-800 font-bold"
+                          placeholder="Ex: Curitiba"
+                        />
+                      </div>
+
+                      <div className="space-y-1.5">
+                        <label className="text-[10px] font-black uppercase tracking-widest text-gray-500 dark:text-gray-300">
+                          UF (Estado) *
+                        </label>
+                        <input
+                          value={lojaFormData.uf}
+                          onChange={(e) => setLojaFormData(prev => ({ ...prev, uf: e.target.value.toUpperCase() }))}
+                          maxLength={2}
+                          className="w-full px-4 py-3 rounded-xl border border-gray-200 dark:border-gray-700 dark:bg-gray-800 font-bold uppercase"
+                          placeholder="PR"
+                        />
+                      </div>
+
+                      <div className="md:col-span-2 space-y-1.5">
+                        <label className="text-[10px] font-black uppercase tracking-widest text-gray-500 dark:text-gray-300">
+                          Endereço Completo
+                        </label>
+                        <input
+                          value={lojaFormData.endereco}
+                          onChange={(e) => setLojaFormData(prev => ({ ...prev, endereco: e.target.value }))}
+                          className="w-full px-4 py-3 rounded-xl border border-gray-200 dark:border-gray-700 dark:bg-gray-800 text-sm"
+                          placeholder="Rua / Av., Número, Bairro, CEP"
+                        />
+                      </div>
+
+                      <div className="space-y-1.5">
+                        <label className="text-[10px] font-black uppercase tracking-widest text-gray-500 dark:text-gray-300">
+                          Telefone / WhatsApp
+                        </label>
+                        <input
+                          value={lojaFormData.telefone}
+                          onChange={(e) => setLojaFormData(prev => ({ ...prev, telefone: e.target.value }))}
+                          className="w-full px-4 py-3 rounded-xl border border-gray-200 dark:border-gray-700 dark:bg-gray-800 text-sm"
+                          placeholder="(41) 3000-0000"
+                        />
+                      </div>
+
+                      <div className="space-y-1.5">
+                        <label className="text-[10px] font-black uppercase tracking-widest text-gray-500 dark:text-gray-300">
+                          E-mail de Contato
+                        </label>
+                        <input
+                          type="email"
+                          value={lojaFormData.email}
+                          onChange={(e) => setLojaFormData(prev => ({ ...prev, email: e.target.value }))}
+                          className="w-full px-4 py-3 rounded-xl border border-gray-200 dark:border-gray-700 dark:bg-gray-800 text-sm"
+                          placeholder="rh@gigantepneus.com.br"
+                        />
+                      </div>
+
+                      <div className="md:col-span-2 space-y-1.5">
+                        <label className="text-[10px] font-black uppercase tracking-widest text-gray-500 dark:text-gray-300">
+                          ID da Pasta Google Drive (Opcional)
+                        </label>
+                        <input
+                          value={lojaFormData.google_drive_folder_id}
+                          onChange={(e) => setLojaFormData(prev => ({ ...prev, google_drive_folder_id: e.target.value }))}
+                          className="w-full px-4 py-3 rounded-xl border border-gray-200 dark:border-gray-700 dark:bg-gray-800 font-mono text-xs"
+                          placeholder="Ex: 1A2b3C4d5E... (se vazio, usa a pasta raiz configurada)"
+                        />
+                      </div>
+                    </div>
+
+                    <div className="flex items-center justify-between p-4 bg-gray-50 dark:bg-gray-800/60 rounded-2xl border border-gray-200 dark:border-gray-700">
+                      <div>
+                        <div className="text-sm font-black text-gray-900 dark:text-white uppercase tracking-tight">Status da Unidade</div>
+                        <div className="text-xs text-gray-500 dark:text-gray-400">
+                          {lojaFormData.ativa ? 'Unidade ativa e disponível para vinculação de vagas.' : 'Unidade inativa.'}
+                        </div>
+                      </div>
+                      <label className="relative inline-flex items-center cursor-pointer">
+                        <input
+                          type="checkbox"
+                          checked={lojaFormData.ativa}
+                          onChange={(e) => setLojaFormData(prev => ({ ...prev, ativa: e.target.checked }))}
+                          className="sr-only peer"
+                        />
+                        <div className="w-11 h-6 bg-gray-200 peer-focus:outline-none rounded-full peer dark:bg-gray-700 peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all dark:border-gray-600 peer-checked:bg-red-600"></div>
+                      </label>
+                    </div>
+
+                    <div className="flex justify-end gap-3 pt-4 border-t border-gray-100 dark:border-gray-800">
+                      <button
+                        onClick={() => setLojaModalOpen(false)}
+                        className="px-5 py-2.5 rounded-xl bg-gray-100 dark:bg-gray-800 text-gray-700 dark:text-gray-200 text-xs font-black uppercase"
+                      >
+                        Cancelar
+                      </button>
+                      <button
+                        onClick={handleSaveLoja}
+                        disabled={savingLoja || !lojaFormData.nome.trim()}
+                        className="px-6 py-2.5 rounded-xl bg-red-600 hover:bg-red-700 text-white text-xs font-black uppercase disabled:opacity-60 transition-all flex items-center gap-2"
+                      >
+                        {savingLoja ? <Loader2 className="h-4 w-4 animate-spin" /> : <Check className="h-4 w-4" />}
+                        {editingLoja ? 'Salvar Alterações' : 'Criar Unidade'}
+                      </button>
                     </div>
                   </div>
                 </div>

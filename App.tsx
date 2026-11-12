@@ -16,10 +16,6 @@ import logoLight from './imagens/logo whitemode.png';
 
 const App: React.FC = () => {
   const [user, setUser] = useState<User | null>(null);
-  const [mockUser, setMockUser] = useState<any>(() => {
-    const saved = localStorage.getItem('abucci_mock_user');
-    return saved ? JSON.parse(saved) : null;
-  });
   const [loading, setLoading] = useState(true);
   const [darkMode, setDarkMode] = useState(() => localStorage.getItem('theme') === 'dark');
 
@@ -48,11 +44,11 @@ const App: React.FC = () => {
 
   const handleLogout = async () => {
     await supabase.auth.signOut();
-    setMockUser(null);
+    setUser(null);
     localStorage.removeItem('abucci_mock_user');
   };
 
-  const activeUser = user || mockUser;
+  const activeUser = user;
 
   if (loading) {
     return (

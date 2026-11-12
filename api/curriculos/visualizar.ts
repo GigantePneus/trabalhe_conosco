@@ -222,37 +222,42 @@ export async function handleVisualizarCurriculo(
  * Handler padrão para Vercel Serverless Function
  */
 export default async function vercelHandler(req: any, res: any) {
-  if (req.method !== 'GET') {
-    res.setHeader('Allow', ['GET']);
-    return res.status(405).json({ success: false, error: `Método ${req.method} não permitido.` });
+  try {
+    if (req.method !== 'GET') {
+      res.setHeader('Allow', ['GET']);
+      return res.status(405).json({ success: false, error: `Método ${req.method} não permitido.` });
+    }
+
+    const authHeader = req.headers?.authorization;
+    const bearerToken = typeof authHeader === 'string' && authHeader.startsWith('Bearer ')
+      ? authHeader.slice(7)
+      : null;
+    const token = bearerToken || (req.query?.token as string) || undefined;
+    const curriculoId = (req.query?.id as string) || (req.query?.curriculoId as string) || undefined;
+    const fileId = (req.query?.fileId as string) || undefined;
+    const clientIp = (req.headers?.['x-forwarded-for'] as string)?.split(',')[0].trim() ||
+      req.socket?.remoteAddress ||
+      '127.0.0.1';
+    const userAgent = (req.headers?.['user-agent'] as string) || '';
+
+    const result = await handleVisualizarCurriculo({
+      curriculoId,
+      fileId,
+      token,
+      clientIp,
+      userAgent
+    });
+
+    if (result.statusCode === 200 && result.buffer) {
+      res.setHeader('Content-Type', result.mimeType || 'application/pdf');
+      res.setHeader('Content-Disposition', `inline; filename="${result.fileName || 'curriculo.pdf'}"`);
+      res.setHeader('Cache-Control', 'private, no-cache, no-store, must-revalidate');
+      return res.status(200).send(result.buffer);
+    }
+
+    return res.status(result.statusCode).json({ success: false, error: result.error });
+  } catch (err: any) {
+    console.error('[VercelHandler][VisualizarException]', err);
+    return res.status(500).json({ success: false, error: err?.message || 'Erro interno no servidor.' });
   }
-
-  const authHeader = req.headers?.authorization;
-  const bearerToken = typeof authHeader === 'string' && authHeader.startsWith('Bearer ')
-    ? authHeader.slice(7)
-    : null;
-  const token = bearerToken || (req.query?.token as string) || undefined;
-  const curriculoId = (req.query?.id as string) || (req.query?.curriculoId as string) || undefined;
-  const fileId = (req.query?.fileId as string) || undefined;
-  const clientIp = (req.headers?.['x-forwarded-for'] as string)?.split(',')[0].trim() ||
-    req.socket?.remoteAddress ||
-    '127.0.0.1';
-  const userAgent = (req.headers?.['user-agent'] as string) || '';
-
-  const result = await handleVisualizarCurriculo({
-    curriculoId,
-    fileId,
-    token,
-    clientIp,
-    userAgent
-  });
-
-  if (result.statusCode === 200 && result.buffer) {
-    res.setHeader('Content-Type', result.mimeType || 'application/pdf');
-    res.setHeader('Content-Disposition', `inline; filename="${result.fileName || 'curriculo.pdf'}"`);
-    res.setHeader('Cache-Control', 'private, no-cache, no-store, must-revalidate');
-    return res.status(200).send(result.buffer);
-  }
-
-  return res.status(result.statusCode).json({ success: false, error: result.error });
 }

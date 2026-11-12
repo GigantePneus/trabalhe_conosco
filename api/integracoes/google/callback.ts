@@ -88,21 +88,26 @@ export async function handleGoogleCallback(
 }
 
 export default async function vercelCallbackHandler(req: any, res: any) {
-  if (req.method !== 'GET') {
-    res.setHeader('Allow', ['GET']);
-    return res.status(405).json({ success: false, mensagem: `Método ${req.method} não permitido.` });
+  try {
+    if (req.method !== 'GET') {
+      res.setHeader('Allow', ['GET']);
+      return res.status(405).json({ success: false, mensagem: `Método ${req.method} não permitido.` });
+    }
+
+    res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, private');
+
+    const urlObj = new URL(req.url || '/api/integracoes/google/callback', 'http://localhost');
+    const query: CallbackQuery = {
+      code: req.query?.code ?? urlObj.searchParams.get('code') ?? undefined,
+      state: req.query?.state ?? urlObj.searchParams.get('state') ?? undefined,
+      error: req.query?.error ?? urlObj.searchParams.get('error') ?? undefined
+    };
+
+    const result = await handleGoogleCallback(query);
+    return res.status(result.statusCode).json(result.data);
+  } catch (err: any) {
+    console.error('[VercelHandler][CallbackException]', err);
+    return res.status(500).json({ success: false, mensagem: err?.message || 'Erro interno no servidor.' });
   }
-
-  res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, private');
-
-  const urlObj = new URL(req.url || '/api/integracoes/google/callback', 'http://localhost');
-  const query: CallbackQuery = {
-    code: req.query?.code ?? urlObj.searchParams.get('code') ?? undefined,
-    state: req.query?.state ?? urlObj.searchParams.get('state') ?? undefined,
-    error: req.query?.error ?? urlObj.searchParams.get('error') ?? undefined
-  };
-
-  const result = await handleGoogleCallback(query);
-  return res.status(result.statusCode).json(result.data);
 }
 

@@ -11,9 +11,9 @@ const PublicJobDetails: React.FC = () => {
   const [loading, setLoading] = useState(true);
   const [locating, setLocating] = useState(false);
 
-  const destinationAddress = 'R. Martins Pena, 93 - Campos Eliseos - Ribeirao Preto - SP - CEP 14080-620';
-  const destinationPhone = '+55 (16) 3969-1000';
-  const destinationMail = 'sac@gigante.com.br';
+  const destinationAddress = 'Gigante Pneus - Matriz (Lapa) - São Paulo - SP';
+  const destinationPhone = '+55 (11) 3649-1000';
+  const destinationMail = 'rh@gigantepneus.com.br';
 
   useEffect(() => {
     let isMounted = true;
@@ -44,7 +44,7 @@ const PublicJobDetails: React.FC = () => {
             }
             return { cargo, landing };
           })
-          .find(item => item.landing.slug === slug && item.landing.published);
+          .find(item => (item.cargo.id === slug || item.landing.slug === slug) && item.landing.published);
         setJob(match || null);
       } catch (error) {
         if (!isMounted) return;
@@ -149,7 +149,7 @@ const PublicJobDetails: React.FC = () => {
                   <p className="inline-flex items-center gap-2"><BriefcaseBusiness className="h-4 w-4" /> {safeLanding.workModel}</p>
                   <p className="inline-flex items-center gap-2"><CalendarDays className="h-4 w-4" /> {new Date().toLocaleDateString('pt-BR')}</p>
                 </div>
-                <Link to={`/candidatar/${safeLanding.slug}`} className="mt-4 w-full inline-flex justify-center bg-[#ffcc00] hover:bg-[#f2c200] text-[#072a5a] px-4 py-3 rounded-xl text-xs font-black uppercase">
+                <Link to={`/candidatar/${job.cargo.id}`} className="mt-4 w-full inline-flex justify-center bg-[#ffcc00] hover:bg-[#f2c200] text-[#072a5a] px-4 py-3 rounded-xl text-xs font-black uppercase">
                   Quero me candidatar
                 </Link>
               </div>
@@ -196,7 +196,7 @@ const PublicJobDetails: React.FC = () => {
               <ul className="mt-2 space-y-1">
                 {safeLanding.benefits.map((item, idx) => <li key={idx} className="text-sm text-gray-700 dark:text-gray-300">- {item}</li>)}
               </ul>
-              <Link to={`/candidatar/${safeLanding.slug}`} className="mt-6 w-full inline-flex justify-center bg-[#ffcc00] hover:bg-[#f2c200] text-[#072a5a] px-4 py-3 rounded-xl text-xs font-black uppercase">Quero me candidatar</Link>
+              <Link to={`/candidatar/${job.cargo.id}`} className="mt-6 w-full inline-flex justify-center bg-[#ffcc00] hover:bg-[#f2c200] text-[#072a5a] px-4 py-3 rounded-xl text-xs font-black uppercase">Quero me candidatar</Link>
             </div>
 
             <div className="bg-[#eef4ff] dark:bg-[#0b1220] rounded-3xl border border-[#d7e5ff] dark:border-gray-700 p-6">
@@ -209,7 +209,7 @@ const PublicJobDetails: React.FC = () => {
 
         <section className="mt-6 bg-white dark:bg-[#0b1220] rounded-3xl border border-gray-200 dark:border-gray-700 p-6">
           <h3 className="text-2xl font-black text-[#072a5a] dark:text-blue-200 flex items-center gap-2"><Building2 className="h-5 w-5" /> Sobre a empresa</h3>
-          <p className="mt-3 text-sm text-gray-700 dark:text-gray-300">A Gigante conecta pessoas a oportunidades e impulsiona tecnologia para o setor da saude em todo o Brasil.</p>
+          <p className="mt-3 text-sm text-gray-700 dark:text-gray-300">A Gigante Pneus é uma rede referência em serviços automotivos, vendas de pneus e manutenção de excelência em todo o Brasil.</p>
           <div className="mt-5 grid grid-cols-1 md:grid-cols-3 gap-3 text-sm">
             <p className="flex items-center gap-2 text-gray-700 dark:text-gray-300"><MapPin className="h-4 w-4 text-[#0a3b8f]" /> {destinationAddress}</p>
             <p className="flex items-center gap-2 text-gray-700 dark:text-gray-300"><Phone className="h-4 w-4 text-[#0a3b8f]" /> {destinationPhone}</p>

@@ -58,8 +58,8 @@ const PublicJobsBoard: React.FC = () => {
     })
     .filter(item => item.landing.published);
 
-  const handleShare = async (title: string, slug: string) => {
-    const url = `${window.location.origin}${window.location.pathname}#/vagas/${slug}`;
+  const handleShare = async (title: string, id: string) => {
+    const url = `${window.location.origin}${window.location.pathname}#/vagas/${id}`;
     try {
       if (navigator.share) {
         await navigator.share({ title, text: `Confira esta vaga: ${title}`, url });
@@ -171,13 +171,13 @@ const PublicJobsBoard: React.FC = () => {
                   {/* Ações */}
                   <div className="flex items-center gap-3 pt-2 border-t border-gray-100 dark:border-gray-800">
                     <Link
-                      to={`/vagas/${landing.slug}`}
+                      to={`/vagas/${cargo.id}`}
                       className="flex-1 inline-flex justify-center items-center gap-2 bg-[#ffcc00] hover:bg-[#f2c200] text-[#072a5a] px-5 py-3 rounded-xl font-black uppercase text-xs transition-all shadow-sm hover:shadow-md"
                     >
                       Saiba mais <ArrowRight className="h-4 w-4" />
                     </Link>
                     <button
-                      onClick={() => handleShare(landing.title, landing.slug)}
+                      onClick={() => handleShare(landing.title, cargo.id)}
                       className="inline-flex items-center gap-2 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 text-[#072a5a] dark:text-gray-200 hover:bg-slate-50 dark:hover:bg-gray-700 px-4 py-3 rounded-xl text-xs font-black uppercase transition-all"
                     >
                       <Share2 className="h-4 w-4" />

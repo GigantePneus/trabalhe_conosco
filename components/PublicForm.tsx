@@ -139,6 +139,7 @@ const PublicForm: React.FC = () => {
 
         if (slug) {
           const matched = loadedCargos.find(c => {
+            if (c.id === slug) return true;
             const landing = parseJobLandingFromRequisitos({
               id: c.id,
               nome: c.titulo,
@@ -156,6 +157,12 @@ const PublicForm: React.FC = () => {
               estado: matched.loja_estado || prev.estado
             }));
           }
+        } else {
+          // Acesso direto ao Banco de Talentos (/cadastro): pré-ativa candidatura espontânea
+          setFormData(prev => ({
+            ...prev,
+            candidatura_espontanea: true
+          }));
         }
       } catch (e) {
         console.warn('Erro ao carregar opções públicas:', e);

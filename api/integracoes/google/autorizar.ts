@@ -165,23 +165,28 @@ export async function handleGoogleAuthorize(
 }
 
 export default async function vercelAuthorizeHandler(req: any, res: any) {
-  if (req.method !== 'GET') {
-    res.setHeader('Allow', ['GET']);
-    return res.status(405).json({ success: false, mensagem: `Método ${req.method} não permitido.` });
+  try {
+    if (req.method !== 'GET') {
+      res.setHeader('Allow', ['GET']);
+      return res.status(405).json({ success: false, mensagem: `Método ${req.method} não permitido.` });
+    }
+
+    res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, private');
+    const result = await handleGoogleAuthorize(req.headers || {});
+
+    if (result.cookieToSet) {
+      res.setHeader('Set-Cookie', result.cookieToSet);
+    }
+
+    const acceptHeader = (req.headers?.['accept'] || '') as string;
+    if (result.statusCode === 200 && result.redirectUrl && acceptHeader.includes('text/html')) {
+      res.writeHead(302, { Location: result.redirectUrl });
+      return res.end();
+    }
+
+    return res.status(result.statusCode).json(result.data);
+  } catch (err: any) {
+    console.error('[VercelHandler][AuthorizeException]', err);
+    return res.status(500).json({ success: false, mensagem: err?.message || 'Erro interno no servidor.' });
   }
-
-  res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, private');
-  const result = await handleGoogleAuthorize(req.headers || {});
-
-  if (result.cookieToSet) {
-    res.setHeader('Set-Cookie', result.cookieToSet);
-  }
-
-  const acceptHeader = (req.headers?.['accept'] || '') as string;
-  if (result.statusCode === 200 && result.redirectUrl && acceptHeader.includes('text/html')) {
-    res.writeHead(302, { Location: result.redirectUrl });
-    return res.end();
-  }
-
-  return res.status(result.statusCode).json(result.data);
 }

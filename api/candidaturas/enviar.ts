@@ -1,15 +1,12 @@
 import crypto from 'crypto';
-import dotenv from 'dotenv';
-dotenv.config({ path: '.env.local' });
 import { createClient } from '@supabase/supabase-js';
 import { validateCurriculoFile } from '../../services/security/fileValidator';
 import { candidaturasRateLimiter, checkDistributedRateLimit } from '../../services/security/rateLimiter';
 import { googleDriveStorage } from '../../services/storage/googleDriveStorage';
 import { validateCpf, maskCpf, generateCpfHash, encryptCpf } from '../../services/security/cpfSecurity';
 
-// Configuração do cliente Supabase administrativo no backend com reload dinâmico de .env.local
+// Configuração do cliente Supabase administrativo no backend
 export function getSupabaseAdmin() {
-  dotenv.config({ path: '.env.local', override: true });
   const url = process.env.SUPABASE_INTERNAL_URL || process.env.VITE_SUPABASE_URL || 'https://hidayzojjztfyuefmknz.supabase.co';
   const key = process.env.SUPABASE_SERVICE_ROLE_KEY;
   if (!key || key.includes('supabase-demo') || key.trim() === '') {
@@ -496,29 +493,38 @@ export async function handleCandidatura(
  * Handler padrão para Vercel Serverless Function
  */
 export default async function vercelHandler(req: any, res: any) {
-  if (req.method !== 'POST') {
-    res.setHeader('Allow', ['POST']);
-    return res.status(405).json({ success: false, mensagem: `Método ${req.method} não permitido.` });
-  }
-
-  const clientIp = req.headers['x-forwarded-for']?.toString().split(',')[0].trim() ||
-    req.socket?.remoteAddress ||
-    '127.0.0.1';
-
-  let body = req.body;
-  if (typeof body === 'string') {
-    try {
-      body = JSON.parse(body);
-    } catch {
-      // payload json bruto
+  try {
+    if (req.method !== 'POST') {
+      res.setHeader('Allow', ['POST']);
+      return res.status(405).json({ success: false, mensagem: `Método ${req.method} não permitido.` });
     }
+
+    const clientIp = req.headers['x-forwarded-for']?.toString().split(',')[0].trim() ||
+      req.socket?.remoteAddress ||
+      '127.0.0.1';
+
+    let body = req.body;
+    if (typeof body === 'string') {
+      try {
+        body = JSON.parse(body);
+      } catch {
+        // payload json bruto
+      }
+    }
+
+    const result = await handleCandidatura(body || {}, clientIp);
+
+    if (result.statusCode === 503 || result.statusCode === 429) {
+      res.setHeader('Retry-After', '30');
+    }
+
+    return res.status(result.statusCode).json(result.data);
+  } catch (criticalErr: any) {
+    console.error('[VercelHandler][CriticalException]', criticalErr);
+    return res.status(500).json({
+      success: false,
+      mensagem: 'Falha interna no processamento da candidatura pelo servidor.',
+      detalhes: criticalErr?.message || 'Erro inesperado'
+    });
   }
-
-  const result = await handleCandidatura(body || {}, clientIp);
-
-  if (result.statusCode === 503 || result.statusCode === 429) {
-    res.setHeader('Retry-After', '30');
-  }
-
-  return res.status(result.statusCode).json(result.data);
 }

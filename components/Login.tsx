@@ -28,16 +28,6 @@ const Login: React.FC = () => {
     }
   };
 
-  const handleBypass = () => {
-    const mockUser = {
-      id: 'mock_rh_admin',
-      email: 'rh@gigantepneus.com.br',
-      user_metadata: { name: 'Administrador Demo' }
-    };
-    localStorage.setItem('abucci_mock_user', JSON.stringify(mockUser));
-    window.location.reload();
-  };
-
   return (
     <div className="min-h-[calc(100vh-160px)] flex items-center justify-center px-4 py-12">
       <div className="max-w-md w-full">
@@ -103,14 +93,6 @@ const Login: React.FC = () => {
               className="w-full bg-red-600 hover:bg-red-700 text-white py-4 rounded-xl font-bold uppercase text-xl shadow-xl hover:shadow-red-600/20 transition-all flex items-center justify-center gap-3 disabled:opacity-70"
             >
               {loading ? <Loader2 className="h-6 w-6 animate-spin" /> : "Acessar Painel"}
-            </button>
-
-            <button 
-              type="button"
-              onClick={handleBypass}
-              className="w-full mt-2 bg-gray-100 hover:bg-gray-200 dark:bg-gray-800 dark:hover:bg-gray-700 text-gray-700 dark:text-gray-300 py-3.5 rounded-xl font-bold uppercase text-xs transition-all flex items-center justify-center gap-2"
-            >
-              Acesso Rápido (Bypass Demo)
             </button>
           </form>
 
