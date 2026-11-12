@@ -128,7 +128,7 @@ const PublicJobsBoard: React.FC = () => {
     activeJobs.forEach(j => {
       const matchUf = selectedUf === 'todas' || j.uf === selectedUf;
       const matchCidade = selectedCidade === 'todas' || j.cidade === selectedCidade;
-      if (matchUf && matchCidade && j.lojaId && j.lojaId !== 'corporativo') {
+      if (matchUf && matchCidade && j.lojaId) {
         if (!map.has(j.lojaId)) {
           map.set(j.lojaId, {
             id: j.lojaId,
