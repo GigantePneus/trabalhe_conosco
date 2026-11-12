@@ -38,3 +38,4 @@ BEGIN
             USING (ativa = true);
     END IF;
 END $$;
+

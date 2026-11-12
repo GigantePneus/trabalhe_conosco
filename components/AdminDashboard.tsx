@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { supabase } from '../supabase';
 import { Candidato, ConfigItem, JobLandingContent, KPIStats, Pesquisa, Pergunta, TipoPergunta } from '../types';
 import { 
@@ -6,7 +6,8 @@ import {
   Eye, Download, MapPin, X, Loader2, Plus, Trash2, TrendingUp, ShieldCheck, Calendar,
   Link2, Copy, CheckCheck, ChevronLeft, ToggleLeft, ToggleRight, FileText, Hash, AlignLeft, ListChecks, Star,
   Share2, ExternalLink, MessageCircle, Brain, Award, Zap, Check, AlertTriangle, ThumbsUp, ThumbsDown, RefreshCw,
-  KeyRound, Lock, EyeOff, Shield, Folder
+  KeyRound, Lock, EyeOff, Shield, Folder,
+  LayoutList, LayoutGrid, Search, PowerOff, RotateCcw, ChevronRight, Info
 } from 'lucide-react';
 import { analyzeSurveyResponses, analyzeTalentCompatibility, listAvailableGeminiModels, AIAnalysisResult, TalentAnalysisResult, DEFAULT_PROMPT_SURVEYS, DEFAULT_PROMPT_TALENTS } from '../aiService';
 import { createDefaultJobLanding, parseJobLandingFromRequisitos, serializeJobLanding, toLines } from '../jobsService';
@@ -35,6 +36,32 @@ const AdminDashboard: React.FC = () => {
   });
   const [savingLoja, setSavingLoja] = useState(false);
   const [lojaMsg, setLojaMsg] = useState({ text: '', type: '' });
+
+  // Visualização, Pesquisa e Paginação de Unidades (Prompt 51)
+  const [lojasViewMode, setLojasViewMode] = useState<'list' | 'cards'>('list');
+  const [searchLoja, setSearchLoja] = useState('');
+  const [showInactiveLojas, setShowInactiveLojas] = useState(false);
+  const [lojasCurrentPage, setLojasCurrentPage] = useState(1);
+  const LOJAS_PER_PAGE = 8;
+
+  // Estados de Desativação e Reativação Segura de Unidades (Prompt 51)
+  const [deactivateModalOpen, setDeactivateModalOpen] = useState(false);
+  const [lojaToDeactivate, setLojaToDeactivate] = useState<any | null>(null);
+  const [deactivateReason, setDeactivateReason] = useState('');
+  const [deactivateImpact, setDeactivateImpact] = useState<{
+    total_vagas: number;
+    vagas_publicadas: number;
+    total_candidaturas: number;
+  } | null>(null);
+  const [loadingDeactivateImpact, setLoadingDeactivateImpact] = useState(false);
+  const [submittingDeactivation, setSubmittingDeactivation] = useState(false);
+  const [deactivateError, setDeactivateError] = useState('');
+
+  const [reactivateModalOpen, setReactivateModalOpen] = useState(false);
+  const [lojaToReactivate, setLojaToReactivate] = useState<any | null>(null);
+  const [submittingReactivation, setSubmittingReactivation] = useState(false);
+  const [reactivateError, setReactivateError] = useState('');
+  const [copiedLojaId, setCopiedLojaId] = useState<string | null>(null);
 
   // Unidade Vinculada ao Cargo / Vaga
   const [selectedJobLojaId, setSelectedJobLojaId] = useState<string>('');
@@ -471,24 +498,135 @@ const AdminDashboard: React.FC = () => {
     }
   };
 
-  const handleToggleLojaStatus = async (loja: any) => {
-    const newStatus = !loja.ativa;
-    const actionLabel = newStatus ? 'reativar' : 'desativar';
-    if (!window.confirm(`Deseja realmente ${actionLabel} a unidade "${loja.nome}"?`)) {
-      return;
+  // Cópia de Identificador da Loja
+  const handleCopyLojaId = async (id: string) => {
+    try {
+      if (navigator.clipboard?.writeText) {
+        await navigator.clipboard.writeText(id);
+        setCopiedLojaId(id);
+        setTimeout(() => setCopiedLojaId(null), 2000);
+      }
+    } catch (e) {
+      console.warn('Erro ao copiar ID:', e);
     }
-
-    const { error } = await supabase
-      .from('lojas')
-      .update({ ativa: newStatus })
-      .eq('id', loja.id);
-
-    if (error) {
-      alert(`Erro ao alterar status da unidade: ${error.message}`);
-      return;
-    }
-    fetchData();
   };
+
+  // Handlers do Ciclo de Vida de Unidades (Prompt 51)
+  const handleInitiateDeactivate = async (loja: any) => {
+    setLojaToDeactivate(loja);
+    setDeactivateReason('');
+    setDeactivateError('');
+    setDeactivateImpact(null);
+    setDeactivateModalOpen(true);
+    setLoadingDeactivateImpact(true);
+
+    try {
+      const { data, error } = await supabase.rpc('obter_resumo_desativacao_unidade', {
+        p_loja_id: loja.id
+      });
+      if (error) throw error;
+      setDeactivateImpact(data as any);
+    } catch (err: any) {
+      console.warn('Falha ao obter resumo da unidade via RPC, calculando localmente:', err);
+      const totalVagas = cargos.filter(c => c.loja_id === loja.id).length;
+      const vagasPublicadas = cargos.filter(c => c.loja_id === loja.id && (c as any).publicada === true).length;
+      const totalCandidaturas = candidatos.filter(c => (c as any).loja_id === loja.id).length;
+      setDeactivateImpact({
+        total_vagas: totalVagas,
+        vagas_publicadas: vagasPublicadas,
+        total_candidaturas: totalCandidaturas
+      });
+    } finally {
+      setLoadingDeactivateImpact(false);
+    }
+  };
+
+  const handleConfirmDeactivate = async () => {
+    if (!lojaToDeactivate) return;
+    if (!deactivateReason.trim()) {
+      setDeactivateError('Por favor, informe o motivo da desativação da unidade.');
+      return;
+    }
+
+    setSubmittingDeactivation(true);
+    setDeactivateError('');
+
+    try {
+      const { error } = await supabase.rpc('desativar_unidade', {
+        p_loja_id: lojaToDeactivate.id,
+        p_motivo: deactivateReason.trim()
+      });
+
+      if (error) throw error;
+
+      setDeactivateModalOpen(false);
+      setLojaToDeactivate(null);
+      setDeactivateReason('');
+      await fetchData();
+      alert(`Unidade desativada com sucesso! As vagas publicadas foram despublicadas e não serão republicadas automaticamente.`);
+    } catch (err: any) {
+      console.error('Erro ao desativar unidade:', err);
+      setDeactivateError(err?.message || 'Falha ao desativar unidade. Verifique se possui permissão de Gestor Master.');
+    } finally {
+      setSubmittingDeactivation(false);
+    }
+  };
+
+  const handleInitiateReactivate = (loja: any) => {
+    setLojaToReactivate(loja);
+    setReactivateError('');
+    setReactivateModalOpen(true);
+  };
+
+  const handleConfirmReactivate = async () => {
+    if (!lojaToReactivate) return;
+    setSubmittingReactivation(true);
+    setReactivateError('');
+
+    try {
+      const { error } = await supabase.rpc('reativar_unidade', {
+        p_loja_id: lojaToReactivate.id
+      });
+
+      if (error) throw error;
+
+      setReactivateModalOpen(false);
+      setLojaToReactivate(null);
+      await fetchData();
+      alert(`Unidade reativada com sucesso! Importante: as vagas antigas continuam despublicadas por segurança para que sejam revisadas e aprovadas pelo RH.`);
+    } catch (err: any) {
+      console.error('Erro ao reativar unidade:', err);
+      setReactivateError(err?.message || 'Falha ao reativar unidade. Verifique se possui permissão de Gestor Master.');
+    } finally {
+      setSubmittingReactivation(false);
+    }
+  };
+
+  // Filtros de unidades, busca e paginação (Prompt 51)
+  const filteredLojas = useMemo(() => {
+    return lojasList.filter(loja => {
+      if (!showInactiveLojas && !loja.ativa) {
+        return false;
+      }
+      if (searchLoja.trim()) {
+        const query = searchLoja.trim().toLowerCase();
+        const matchNome = (loja.nome || '').toLowerCase().includes(query);
+        const matchCidade = (loja.cidade || '').toLowerCase().includes(query);
+        const matchEstado = (loja.estado || '').toLowerCase().includes(query);
+        const matchId = (loja.id || '').toLowerCase().includes(query);
+        if (!matchNome && !matchCidade && !matchEstado && !matchId) {
+          return false;
+        }
+      }
+      return true;
+    });
+  }, [lojasList, showInactiveLojas, searchLoja]);
+
+  const totalLojasPages = Math.ceil(filteredLojas.length / LOJAS_PER_PAGE) || 1;
+  const paginatedLojas = useMemo(() => {
+    const start = (lojasCurrentPage - 1) * LOJAS_PER_PAGE;
+    return filteredLojas.slice(start, start + LOJAS_PER_PAGE);
+  }, [filteredLojas, lojasCurrentPage]);
 
   // === GESTÃO DE VAGAS ===
   const openJobEditor = (cargo: any) => {
@@ -2182,9 +2320,11 @@ const AdminDashboard: React.FC = () => {
             </div>
           )}
 
-          {/* Aba: GESTÃO DE UNIDADES (LOJAS) */}
+          {/* Aba: GESTÃO DE UNIDADES (LOJAS) - PROMPT 51 */}
           {activeTab === 'lojas' && (
             <div className="space-y-8 animate-in fade-in duration-500">
+              
+              {/* Cabeçalho Principal da Rede */}
               <div className="bg-white dark:bg-gray-900 rounded-[2.5rem] p-8 border border-gray-100 dark:border-gray-800 shadow-xl flex flex-col md:flex-row md:items-center md:justify-between gap-6">
                 <div className="space-y-1">
                   <div className="flex items-center gap-3">
@@ -2192,9 +2332,11 @@ const AdminDashboard: React.FC = () => {
                       <Building2 className="h-6 w-6" />
                     </div>
                     <div>
-                      <h3 className="text-2xl font-black text-gray-900 dark:text-white uppercase tracking-tighter">Unidades e Lojas</h3>
+                      <h3 className="text-2xl font-black text-gray-900 dark:text-white uppercase tracking-tighter">
+                        Gestão da Rede de Unidades
+                      </h3>
                       <p className="text-gray-600 dark:text-gray-300 text-sm font-medium">
-                        Gerencie as filiais da Gigante Pneus e vincule pastas dedicadas no Google Drive para armazenamento seguro dos currículos.
+                        Administre as filiais da Gigante Pneus com histórico auditado, controle de desativação segura e vinculação de vagas.
                       </p>
                     </div>
                   </div>
@@ -2216,99 +2358,620 @@ const AdminDashboard: React.FC = () => {
                 </div>
               </div>
 
-              {/* Grid de Unidades */}
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                {lojasList.map((loja) => {
-                  const vagasCount = cargos.filter(c => c.loja_id === loja.id).length;
-                  return (
-                    <div
-                      key={loja.id}
-                      className={`bg-white dark:bg-gray-900 rounded-3xl p-6 border transition-all ${
-                        loja.ativa
-                          ? 'border-gray-100 dark:border-gray-800 shadow-lg hover:shadow-xl'
-                          : 'border-dashed border-gray-300 dark:border-gray-700 opacity-60 bg-gray-50/50 dark:bg-gray-900/40'
-                      }`}
-                    >
-                      <div className="flex items-start justify-between gap-3 mb-3">
-                        <div>
-                          <div className="text-[10px] font-black uppercase tracking-wider text-red-600 dark:text-red-400">
-                            Unidade Oficial
-                          </div>
-                          <h4 className="text-lg font-black text-gray-900 dark:text-white uppercase tracking-tight">
-                            {loja.nome}
-                          </h4>
-                        </div>
-                        <span
-                          className={`px-3 py-1 rounded-full text-[10px] font-black uppercase ${
-                            loja.ativa
-                              ? 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-300'
-                              : 'bg-gray-200 text-gray-700 dark:bg-gray-800 dark:text-gray-400'
-                          }`}
-                        >
-                          {loja.ativa ? 'Ativa' : 'Inativa'}
-                        </span>
-                      </div>
+              {/* Barra de Controles: Pesquisa, Visualização Lista/Cards, Toggle Inativas e Contadores */}
+              <div className="bg-white dark:bg-gray-900 rounded-3xl p-5 border border-gray-100 dark:border-gray-800 shadow-md space-y-4">
+                <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4">
+                  
+                  {/* Campo de Pesquisa Rápida */}
+                  <div className="relative flex-1 max-w-md">
+                    <Search className="h-4 w-4 absolute left-3.5 top-1/2 -translate-y-1/2 text-gray-400" />
+                    <input
+                      type="text"
+                      value={searchLoja}
+                      onChange={(e) => {
+                        setSearchLoja(e.target.value);
+                        setLojasCurrentPage(1);
+                      }}
+                      placeholder="Pesquisar por nome, cidade ou identificador..."
+                      className="w-full pl-10 pr-4 py-2.5 rounded-xl bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 text-xs font-bold text-gray-900 dark:text-white outline-none focus:ring-2 focus:ring-red-600/20 focus:border-red-600 transition-all"
+                    />
+                    {searchLoja && (
+                      <button
+                        onClick={() => {
+                          setSearchLoja('');
+                          setLojasCurrentPage(1);
+                        }}
+                        className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600 text-xs font-bold"
+                      >
+                        Limpar
+                      </button>
+                    )}
+                  </div>
 
-                      <div className="space-y-2 text-xs text-gray-600 dark:text-gray-300 pt-2 border-t border-gray-100 dark:border-gray-800">
-                        <div className="flex items-center gap-2">
-                          <MapPin className="h-3.5 w-3.5 text-gray-400 shrink-0" />
-                          <span>{loja.cidade ? `${loja.cidade} - ${loja.estado}` : 'Localidade não informada'}</span>
-                        </div>
-                        {loja.telefone_contato && (
-                          <div className="text-[11px] text-gray-400 pl-5">
-                            Tel: {loja.telefone_contato}
-                          </div>
-                        )}
-                        {loja.email_contato && (
-                          <div className="text-[11px] text-gray-400 pl-5">
-                            E-mail: {loja.email_contato}
-                          </div>
-                        )}
-                        <div className="flex items-center gap-2">
-                          <Briefcase className="h-3.5 w-3.5 text-gray-400 shrink-0" />
-                          <span>{vagasCount} {vagasCount === 1 ? 'vaga vinculada' : 'vagas vinculadas'}</span>
-                        </div>
-                        <div className="flex items-center gap-2 text-[11px]">
-                          <Folder className="h-3.5 w-3.5 text-gray-400 shrink-0" />
-                          <span className="font-mono text-gray-400 truncate">
-                            {loja.google_drive_folder_id ? `Drive: ${loja.google_drive_folder_id.slice(0, 14)}...` : 'Drive: Raiz da Organização'}
-                          </span>
-                        </div>
-                      </div>
+                  <div className="flex flex-wrap items-center gap-3">
+                    
+                    {/* Controle: Mostrar Unidades Desativadas */}
+                    <label className="inline-flex items-center gap-2 cursor-pointer bg-gray-50 dark:bg-gray-800/80 px-3.5 py-2 rounded-xl border border-gray-200 dark:border-gray-700 hover:border-gray-300 transition-all select-none">
+                      <input
+                        type="checkbox"
+                        checked={showInactiveLojas}
+                        onChange={(e) => {
+                          setShowInactiveLojas(e.target.checked);
+                          setLojasCurrentPage(1);
+                        }}
+                        className="rounded border-gray-300 text-red-600 focus:ring-red-600 h-4 w-4"
+                      />
+                      <span className="text-xs font-bold text-gray-700 dark:text-gray-300">
+                        Mostrar unidades desativadas
+                      </span>
+                    </label>
 
-                      {isGestorMaster && (
-                        <div className="flex items-center gap-2 pt-4 mt-4 border-t border-gray-100 dark:border-gray-800">
-                          <button
-                            onClick={() => openEditLojaModal(loja)}
-                            className="bg-gray-100 dark:bg-gray-800 hover:bg-gray-200 dark:hover:bg-gray-700 text-gray-800 dark:text-gray-200 px-3.5 py-2 rounded-xl text-xs font-black uppercase transition-all"
-                          >
-                            Editar
-                          </button>
-                          <button
-                            onClick={() => handleToggleLojaStatus(loja)}
-                            className={`px-3.5 py-2 rounded-xl text-xs font-black uppercase transition-all border ${
-                              loja.ativa
-                                ? 'border-amber-300 text-amber-700 hover:bg-amber-50 dark:hover:bg-amber-950/30'
-                                : 'border-green-300 text-green-700 hover:bg-green-50 dark:hover:bg-green-950/30'
-                            }`}
-                          >
-                            {loja.ativa ? 'Desativar' : 'Reativar'}
-                          </button>
-                        </div>
-                      )}
+                    {/* Alternância: Lista (padrão) vs Cards */}
+                    <div className="inline-flex items-center bg-gray-100 dark:bg-gray-800 p-1 rounded-xl border border-gray-200 dark:border-gray-700">
+                      <button
+                        onClick={() => setLojasViewMode('list')}
+                        className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-black uppercase transition-all ${
+                          lojasViewMode === 'list'
+                            ? 'bg-white dark:bg-gray-900 text-red-600 dark:text-red-400 shadow-sm'
+                            : 'text-gray-500 hover:text-gray-900 dark:text-gray-400'
+                        }`}
+                        title="Visualização em Lista"
+                      >
+                        <LayoutList className="h-3.5 w-3.5" /> Lista
+                      </button>
+                      <button
+                        onClick={() => setLojasViewMode('cards')}
+                        className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-black uppercase transition-all ${
+                          lojasViewMode === 'cards'
+                            ? 'bg-white dark:bg-gray-900 text-red-600 dark:text-red-400 shadow-sm'
+                            : 'text-gray-500 hover:text-gray-900 dark:text-gray-400'
+                        }`}
+                        title="Visualização em Cards"
+                      >
+                        <LayoutGrid className="h-3.5 w-3.5" /> Cards
+                      </button>
                     </div>
-                  );
-                })}
+
+                  </div>
+                </div>
+
+                {/* Contador de unidades */}
+                <div className="flex items-center justify-between text-xs font-bold text-gray-500 dark:text-gray-400 pt-3 border-t border-gray-100 dark:border-gray-800">
+                  <div>
+                    Exibindo <strong className="text-gray-900 dark:text-white">{filteredLojas.length}</strong> de {lojasList.length} unidades registradas
+                    <span className="ml-2 font-normal">
+                      ({lojasList.filter(l => l.ativa).length} ativas, {lojasList.filter(l => !l.ativa).length} inativas)
+                    </span>
+                  </div>
+                  {totalLojasPages > 1 && (
+                    <div>Página {lojasCurrentPage} de {totalLojasPages}</div>
+                  )}
+                </div>
               </div>
 
-              {lojasList.length === 0 && (
-                <div className="text-center py-16 bg-white dark:bg-gray-900 rounded-[2.5rem] border border-gray-100 dark:border-gray-800">
-                  <Building2 className="h-12 w-12 text-gray-300 dark:text-gray-600 mx-auto mb-3" />
-                  <p className="text-gray-500 font-bold uppercase text-sm">Nenhuma unidade cadastrada no sistema.</p>
+              {/* VISUALIZAÇÃO 1: LISTA (Padrão) */}
+              {lojasViewMode === 'list' && (
+                <div className="bg-white dark:bg-gray-900 rounded-3xl border border-gray-100 dark:border-gray-800 shadow-lg overflow-hidden">
+                  <div className="overflow-x-auto">
+                    <table className="w-full text-left text-xs">
+                      <thead className="bg-gray-50/80 dark:bg-gray-800/60 uppercase tracking-wider text-[11px] font-black text-gray-500 dark:text-gray-400 border-b border-gray-100 dark:border-gray-800">
+                        <tr>
+                          <th className="py-4 px-6">Unidade Oficial</th>
+                          <th className="py-4 px-6">Cidade / UF</th>
+                          <th className="py-4 px-6">Identificador (ID)</th>
+                          <th className="py-4 px-6">Situação</th>
+                          <th className="py-4 px-6">Vagas Publicadas</th>
+                          <th className="py-4 px-6 text-right">Ações Permitidas</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-gray-100 dark:divide-gray-800 font-medium">
+                        {paginatedLojas.map((loja) => {
+                          const vagasDaLoja = cargos.filter(c => c.loja_id === loja.id);
+                          const vagasPublicadas = vagasDaLoja.filter(c => (c as any).publicada === true).length;
+                          const isCopied = copiedLojaId === loja.id;
+
+                          return (
+                            <tr
+                              key={loja.id}
+                              className={`transition-colors ${
+                                loja.ativa
+                                  ? 'hover:bg-gray-50/80 dark:hover:bg-gray-800/40 text-gray-900 dark:text-white'
+                                  : 'bg-gray-50/40 dark:bg-gray-900/40 opacity-75 hover:opacity-100'
+                              }`}
+                            >
+                              {/* Nome da Unidade */}
+                              <td className="py-4 px-6">
+                                <div className="flex items-center gap-2.5">
+                                  <div className={`p-2 rounded-xl ${loja.ativa ? 'bg-red-50 dark:bg-red-950/30 text-red-600' : 'bg-gray-200 dark:bg-gray-800 text-gray-500'}`}>
+                                    <Building2 className="h-4 w-4" />
+                                  </div>
+                                  <div>
+                                    <div className="font-black text-sm uppercase tracking-tight">
+                                      {loja.nome}
+                                    </div>
+                                    {!loja.ativa && loja.motivo_desativacao && (
+                                      <div className="text-[11px] text-amber-700 dark:text-amber-400 font-semibold mt-0.5 max-w-xs truncate" title={`Motivo: ${loja.motivo_desativacao}`}>
+                                        Motivo: {loja.motivo_desativacao}
+                                      </div>
+                                    )}
+                                  </div>
+                                </div>
+                              </td>
+
+                              {/* Cidade / UF */}
+                              <td className="py-4 px-6">
+                                <div className="flex items-center gap-1.5 text-gray-600 dark:text-gray-300 font-bold">
+                                  <MapPin className="h-3.5 w-3.5 text-gray-400 shrink-0" />
+                                  <span>{loja.cidade ? `${loja.cidade} - ${loja.estado}` : 'Não informada'}</span>
+                                </div>
+                              </td>
+
+                              {/* Identificador (ID) */}
+                              <td className="py-4 px-6">
+                                <button
+                                  onClick={() => handleCopyLojaId(loja.id)}
+                                  className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-gray-100 dark:bg-gray-800 hover:bg-gray-200 dark:hover:bg-gray-700 text-gray-600 dark:text-gray-300 font-mono text-[11px] transition-all"
+                                  title="Clique para copiar ID completo"
+                                >
+                                  <span>#{loja.id.slice(0, 8)}...</span>
+                                  {isCopied ? <Check className="h-3 w-3 text-green-600" /> : <Copy className="h-3 w-3 text-gray-400" />}
+                                </button>
+                              </td>
+
+                              {/* Situação (Ativa / Inativa) */}
+                              <td className="py-4 px-6">
+                                <span
+                                  className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-[10px] font-black uppercase ${
+                                    loja.ativa
+                                      ? 'bg-green-100 text-green-700 dark:bg-green-950/40 dark:text-green-300 border border-green-200 dark:border-green-900/30'
+                                      : 'bg-amber-100 text-amber-800 dark:bg-amber-950/40 dark:text-amber-300 border border-amber-200 dark:border-amber-900/30'
+                                  }`}
+                                >
+                                  <span className={`w-1.5 h-1.5 rounded-full ${loja.ativa ? 'bg-green-600' : 'bg-amber-600'}`}></span>
+                                  {loja.ativa ? 'Ativa' : 'Inativa'}
+                                </span>
+                              </td>
+
+                              {/* Quantidade de Vagas Publicadas */}
+                              <td className="py-4 px-6">
+                                <div className="space-y-0.5">
+                                  <div className="font-black text-gray-900 dark:text-white">
+                                    {vagasPublicadas} {vagasPublicadas === 1 ? 'vaga pública' : 'vagas públicas'}
+                                  </div>
+                                  <div className="text-[10px] text-gray-400 font-semibold">
+                                    {vagasDaLoja.length} no histórico total
+                                  </div>
+                                </div>
+                              </td>
+
+                              {/* Ações Permitidas */}
+                              <td className="py-4 px-6 text-right">
+                                {isGestorMaster ? (
+                                  <div className="inline-flex items-center gap-2 justify-end">
+                                    <button
+                                      onClick={() => openEditLojaModal(loja)}
+                                      className="px-3 py-1.5 rounded-xl bg-gray-100 dark:bg-gray-800 hover:bg-gray-200 dark:hover:bg-gray-700 text-gray-800 dark:text-gray-200 text-xs font-black uppercase transition-all"
+                                      title="Editar dados da unidade"
+                                    >
+                                      Editar
+                                    </button>
+                                    
+                                    {loja.ativa ? (
+                                      <button
+                                        onClick={() => handleInitiateDeactivate(loja)}
+                                        className="inline-flex items-center gap-1 px-3 py-1.5 rounded-xl border border-amber-300 dark:border-amber-900/40 text-amber-700 dark:text-amber-400 hover:bg-amber-50 dark:hover:bg-amber-950/30 text-xs font-black uppercase transition-all"
+                                        title="Desativar unidade com preservação de histórico"
+                                      >
+                                        <PowerOff className="h-3 w-3" /> Desativar
+                                      </button>
+                                    ) : (
+                                      <button
+                                        onClick={() => handleInitiateReactivate(loja)}
+                                        className="inline-flex items-center gap-1 px-3 py-1.5 rounded-xl border border-green-300 dark:border-green-900/40 text-green-700 dark:text-green-400 hover:bg-green-50 dark:hover:bg-green-950/30 text-xs font-black uppercase transition-all"
+                                        title="Reativar unidade na rede"
+                                      >
+                                        <RotateCcw className="h-3 w-3" /> Reativar
+                                      </button>
+                                    )}
+                                  </div>
+                                ) : (
+                                  <span className="text-gray-400 text-[11px] italic">Somente leitura</span>
+                                )}
+                              </td>
+                            </tr>
+                          );
+                        })}
+                      </tbody>
+                    </table>
+                  </div>
                 </div>
               )}
 
-              {/* Modal de Cadastro / Edição de Loja */}
+              {/* VISUALIZAÇÃO 2: CARDS (Alternativa) */}
+              {lojasViewMode === 'cards' && (
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                  {paginatedLojas.map((loja) => {
+                    const vagasDaLoja = cargos.filter(c => c.loja_id === loja.id);
+                    const vagasPublicadas = vagasDaLoja.filter(c => (c as any).publicada === true).length;
+                    const isCopied = copiedLojaId === loja.id;
+
+                    return (
+                      <div
+                        key={loja.id}
+                        className={`bg-white dark:bg-gray-900 rounded-3xl p-6 border transition-all flex flex-col justify-between ${
+                          loja.ativa
+                            ? 'border-gray-100 dark:border-gray-800 shadow-lg hover:shadow-xl'
+                            : 'border-dashed border-amber-300/60 dark:border-amber-900/40 bg-amber-50/10 dark:bg-amber-950/10 opacity-80 hover:opacity-100'
+                        }`}
+                      >
+                        <div>
+                          {/* Cabeçalho do Card */}
+                          <div className="flex items-start justify-between gap-3 mb-3">
+                            <div className="space-y-1">
+                              <div className="flex items-center gap-1.5 text-[10px] font-black uppercase tracking-wider text-red-600 dark:text-red-400">
+                                <Building2 className="h-3 w-3" /> Unidade Oficial
+                              </div>
+                              <h4 className="text-lg font-black text-gray-900 dark:text-white uppercase tracking-tight">
+                                {loja.nome}
+                              </h4>
+                            </div>
+                            <span
+                              className={`px-3 py-1 rounded-full text-[10px] font-black uppercase shrink-0 ${
+                                loja.ativa
+                                  ? 'bg-green-100 text-green-700 dark:bg-green-950/40 dark:text-green-300'
+                                  : 'bg-amber-100 text-amber-800 dark:bg-amber-950/40 dark:text-amber-300'
+                              }`}
+                            >
+                              {loja.ativa ? 'Ativa' : 'Inativa'}
+                            </span>
+                          </div>
+
+                          {/* Seção de Alerta se Inativa */}
+                          {!loja.ativa && (
+                            <div className="p-3 mb-3 rounded-2xl bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-900/30 text-xs">
+                              <div className="flex items-center gap-1.5 font-bold text-amber-800 dark:text-amber-300">
+                                <Info className="h-3.5 w-3.5 shrink-0" />
+                                <span>Unidade Desativada</span>
+                              </div>
+                              {loja.motivo_desativacao && (
+                                <p className="text-[11px] text-amber-700 dark:text-amber-400 mt-1">
+                                  <strong>Motivo:</strong> {loja.motivo_desativacao}
+                                </p>
+                              )}
+                            </div>
+                          )}
+
+                          {/* Dados da Loja */}
+                          <div className="space-y-2 text-xs text-gray-600 dark:text-gray-300 pt-2 border-t border-gray-100 dark:border-gray-800">
+                            <div className="flex items-center gap-2">
+                              <MapPin className="h-3.5 w-3.5 text-gray-400 shrink-0" />
+                              <span className="font-bold">{loja.cidade ? `${loja.cidade} - ${loja.estado}` : 'Localidade não informada'}</span>
+                            </div>
+                            
+                            <div className="flex items-center gap-2">
+                              <Hash className="h-3.5 w-3.5 text-gray-400 shrink-0" />
+                              <button
+                                onClick={() => handleCopyLojaId(loja.id)}
+                                className="font-mono text-gray-400 hover:text-gray-600 text-[11px] inline-flex items-center gap-1"
+                              >
+                                <span>ID: {loja.id.slice(0, 13)}...</span>
+                                {isCopied ? <Check className="h-3 w-3 text-green-600" /> : <Copy className="h-3 w-3" />}
+                              </button>
+                            </div>
+
+                            {loja.telefone_contato && (
+                              <div className="text-[11px] text-gray-500 pl-5">
+                                Tel: {loja.telefone_contato}
+                              </div>
+                            )}
+                            {loja.email_contato && (
+                              <div className="text-[11px] text-gray-500 pl-5 truncate">
+                                E-mail: {loja.email_contato}
+                              </div>
+                            )}
+
+                            <div className="flex items-center gap-2 pt-1">
+                              <Briefcase className="h-3.5 w-3.5 text-gray-400 shrink-0" />
+                              <span className="font-bold text-gray-900 dark:text-white">
+                                {vagasPublicadas} {vagasPublicadas === 1 ? 'vaga publicada' : 'vagas publicadas'}
+                              </span>
+                              <span className="text-[10px] text-gray-400">({vagasDaLoja.length} totais)</span>
+                            </div>
+
+                            <div className="flex items-center gap-2 text-[11px]">
+                              <Folder className="h-3.5 w-3.5 text-gray-400 shrink-0" />
+                              <span className="font-mono text-gray-400 truncate">
+                                {loja.google_drive_folder_id ? `Drive: ${loja.google_drive_folder_id.slice(0, 14)}...` : 'Drive: Raiz da Organização'}
+                              </span>
+                            </div>
+                          </div>
+                        </div>
+
+                        {/* Rodapé com Ações */}
+                        {isGestorMaster && (
+                          <div className="flex items-center gap-2 pt-4 mt-4 border-t border-gray-100 dark:border-gray-800">
+                            <button
+                              onClick={() => openEditLojaModal(loja)}
+                              className="flex-1 bg-gray-100 dark:bg-gray-800 hover:bg-gray-200 dark:hover:bg-gray-700 text-gray-800 dark:text-gray-200 py-2 rounded-xl text-xs font-black uppercase transition-all text-center"
+                            >
+                              Editar
+                            </button>
+                            {loja.ativa ? (
+                              <button
+                                onClick={() => handleInitiateDeactivate(loja)}
+                                className="flex-1 py-2 rounded-xl text-xs font-black uppercase transition-all border border-amber-300 dark:border-amber-900/40 text-amber-700 dark:text-amber-400 hover:bg-amber-50 dark:hover:bg-amber-950/30 text-center"
+                              >
+                                Desativar
+                              </button>
+                            ) : (
+                              <button
+                                onClick={() => handleInitiateReactivate(loja)}
+                                className="flex-1 py-2 rounded-xl text-xs font-black uppercase transition-all border border-green-300 dark:border-green-900/40 text-green-700 dark:text-green-400 hover:bg-green-50 dark:hover:bg-green-950/30 text-center"
+                              >
+                                Reativar
+                              </button>
+                            )}
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+
+              {/* Estado Vazio de Busca */}
+              {paginatedLojas.length === 0 && (
+                <div className="text-center py-16 bg-white dark:bg-gray-900 rounded-[2.5rem] border border-gray-100 dark:border-gray-800">
+                  <Building2 className="h-12 w-12 text-gray-300 dark:text-gray-600 mx-auto mb-3" />
+                  <p className="text-gray-900 dark:text-white font-black uppercase text-base">Nenhuma unidade encontrada.</p>
+                  <p className="text-gray-500 text-xs mt-1">
+                    {searchLoja
+                      ? 'Nenhuma unidade corresponde aos termos pesquisados.'
+                      : !showInactiveLojas
+                      ? 'Não há unidades ativas disponíveis ou todas foram filtradas.'
+                      : 'Nenhuma unidade cadastrada no sistema.'}
+                  </p>
+                  {searchLoja && (
+                    <button
+                      onClick={() => setSearchLoja('')}
+                      className="mt-4 px-4 py-2 bg-red-50 dark:bg-red-950/30 text-red-600 dark:text-red-400 rounded-xl text-xs font-black uppercase"
+                    >
+                      Limpar filtro de pesquisa
+                    </button>
+                  )}
+                </div>
+              )}
+
+              {/* Paginação da Lista / Cards */}
+              {totalLojasPages > 1 && (
+                <div className="flex flex-col sm:flex-row items-center justify-between gap-4 bg-white dark:bg-gray-900 rounded-2xl border border-gray-200 dark:border-gray-800 p-4 shadow-sm">
+                  <span className="text-xs font-bold text-gray-500 dark:text-gray-400">
+                    Página <strong className="text-gray-900 dark:text-white">{lojasCurrentPage}</strong> de {totalLojasPages} ({filteredLojas.length} unidades)
+                  </span>
+                  
+                  <div className="flex items-center gap-2">
+                    <button
+                      onClick={() => setLojasCurrentPage(prev => Math.max(prev - 1, 1))}
+                      disabled={lojasCurrentPage === 1}
+                      className="inline-flex items-center gap-1 px-3.5 py-2 rounded-xl text-xs font-black uppercase border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 text-gray-700 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-gray-700 disabled:opacity-40 disabled:cursor-not-allowed transition-all"
+                    >
+                      <ChevronLeft className="h-4 w-4" /> Anterior
+                    </button>
+
+                    <div className="flex gap-1">
+                      {Array.from({ length: totalLojasPages }).map((_, idx) => {
+                        const pageNum = idx + 1;
+                        const isActive = pageNum === lojasCurrentPage;
+                        return (
+                          <button
+                            key={pageNum}
+                            onClick={() => setLojasCurrentPage(pageNum)}
+                            className={`w-8 h-8 rounded-xl text-xs font-black transition-all ${
+                              isActive
+                                ? 'bg-red-600 text-white shadow-md'
+                                : 'bg-gray-100 dark:bg-gray-800 text-gray-600 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-700'
+                            }`}
+                          >
+                            {pageNum}
+                          </button>
+                        );
+                      })}
+                    </div>
+
+                    <button
+                      onClick={() => setLojasCurrentPage(prev => Math.min(prev + 1, totalLojasPages))}
+                      disabled={lojasCurrentPage === totalLojasPages}
+                      className="inline-flex items-center gap-1 px-3.5 py-2 rounded-xl text-xs font-black uppercase border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 text-gray-700 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-gray-700 disabled:opacity-40 disabled:cursor-not-allowed transition-all"
+                    >
+                      Próxima <ChevronRight className="h-4 w-4" />
+                    </button>
+                  </div>
+                </div>
+              )}
+
+              {/* MODAL 1: CONFIRMAÇÃO DE DESATIVAÇÃO SEGURA (PROMPT 51) */}
+              {deactivateModalOpen && lojaToDeactivate && (
+                <div className="fixed inset-0 z-[75] bg-black/75 backdrop-blur-sm p-4 flex items-center justify-center animate-in fade-in duration-200">
+                  <div className="w-full max-w-xl bg-white dark:bg-gray-900 rounded-[2.5rem] p-7 md:p-8 border border-gray-100 dark:border-gray-800 shadow-2xl space-y-6">
+                    <div className="flex items-start justify-between gap-3 border-b border-gray-100 dark:border-gray-800 pb-4">
+                      <div className="flex items-center gap-3">
+                        <div className="p-3 bg-amber-50 dark:bg-amber-950/40 rounded-2xl text-amber-600">
+                          <PowerOff className="h-6 w-6" />
+                        </div>
+                        <div>
+                          <h4 className="text-xl font-black text-gray-900 dark:text-white uppercase tracking-tight">
+                            Desativar Unidade Oficial
+                          </h4>
+                          <p className="text-xs text-amber-600 dark:text-amber-400 font-bold uppercase">
+                            Preservação histórica obrigatória da franqueadora
+                          </p>
+                        </div>
+                      </div>
+                      <button
+                        onClick={() => setDeactivateModalOpen(false)}
+                        className="p-2 rounded-xl text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-800"
+                      >
+                        <X className="h-5 w-5" />
+                      </button>
+                    </div>
+
+                    <div className="p-4 bg-gray-50 dark:bg-gray-800/60 rounded-2xl border border-gray-200 dark:border-gray-700 space-y-1">
+                      <div className="text-xs font-bold text-gray-500 uppercase tracking-wider">Unidade Selecionada</div>
+                      <div className="text-base font-black text-gray-900 dark:text-white uppercase">{lojaToDeactivate.nome}</div>
+                      <div className="text-xs text-gray-600 dark:text-gray-300 font-semibold">{lojaToDeactivate.cidade} - {lojaToDeactivate.estado}</div>
+                    </div>
+
+                    {/* Resumo de Impacto Carregado do Supabase */}
+                    <div className="space-y-2">
+                      <div className="text-xs font-black uppercase text-gray-500 tracking-wider">Impacto nos Dados Vinculados</div>
+                      {loadingDeactivateImpact ? (
+                        <div className="flex items-center justify-center py-4 text-xs font-bold text-gray-400">
+                          <Loader2 className="h-4 w-4 animate-spin mr-2" /> Consultando histórico de vagas e candidaturas...
+                        </div>
+                      ) : (
+                        <div className="grid grid-cols-3 gap-3 text-center">
+                          <div className="p-3 bg-gray-50 dark:bg-gray-800/80 rounded-2xl border border-gray-200 dark:border-gray-700">
+                            <div className="text-lg font-black text-gray-900 dark:text-white">{deactivateImpact?.total_vagas || 0}</div>
+                            <div className="text-[10px] font-bold uppercase text-gray-500">Vagas no Histórico</div>
+                          </div>
+                          <div className="p-3 bg-amber-50 dark:bg-amber-950/30 rounded-2xl border border-amber-200 dark:border-amber-900/40">
+                            <div className="text-lg font-black text-amber-700 dark:text-amber-400">{deactivateImpact?.vagas_publicadas || 0}</div>
+                            <div className="text-[10px] font-bold uppercase text-amber-600">Vagas Abertas</div>
+                          </div>
+                          <div className="p-3 bg-blue-50 dark:bg-blue-950/30 rounded-2xl border border-blue-200 dark:border-blue-900/40">
+                            <div className="text-lg font-black text-blue-700 dark:text-blue-400">{deactivateImpact?.total_candidaturas || 0}</div>
+                            <div className="text-[10px] font-bold uppercase text-blue-600">Candidaturas</div>
+                          </div>
+                        </div>
+                      )}
+                    </div>
+
+                    {/* Alertas Contratuais e de Segurança */}
+                    <div className="p-4 bg-amber-50 dark:bg-amber-950/20 rounded-2xl border border-amber-200/80 dark:border-amber-900/30 text-xs text-amber-800 dark:text-amber-300 space-y-1.5 leading-relaxed font-medium">
+                      <div className="font-black uppercase flex items-center gap-1.5 text-amber-900 dark:text-amber-200">
+                        <AlertTriangle className="h-4 w-4 shrink-0 text-amber-600" /> O que acontece ao desativar:
+                      </div>
+                      <ul className="list-disc pl-5 space-y-1 text-[11px]">
+                        <li>As <strong>vagas abertas desta unidade deixarão de aparecer publicamente</strong> no portal Trabalhe Conosco.</li>
+                        <li><strong>Nenhuma vaga ou candidatura será excluída</strong>, mantendo 100% do histórico preservado.</li>
+                        <li>Novas candidaturas para vagas vinculadas a esta unidade serão bloqueadas.</li>
+                        <li>Caso reativada futuramente, <strong>as vagas NÃO serão republicadas automaticamente</strong>, exigindo revisão explícita do RH.</li>
+                      </ul>
+                    </div>
+
+                    {/* Campo Obrigatório: Motivo da Desativação */}
+                    <div className="space-y-1.5">
+                      <label className="text-[11px] font-black uppercase tracking-wider text-gray-700 dark:text-gray-300 flex items-center justify-between">
+                        <span>Motivo da Desativação *</span>
+                        <span className="text-[10px] font-bold text-gray-400">Registrado em auditoria</span>
+                      </label>
+                      <textarea
+                        value={deactivateReason}
+                        onChange={(e) => setDeactivateReason(e.target.value)}
+                        placeholder="Ex: Encerramento de contrato de franquia, reforma predial ou mudança societária..."
+                        rows={3}
+                        className="w-full px-4 py-3 rounded-2xl bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 text-xs font-bold text-gray-900 dark:text-white outline-none focus:ring-2 focus:ring-red-600/20 focus:border-red-600 transition-all resize-none"
+                        required
+                      />
+                    </div>
+
+                    {deactivateError && (
+                      <div className="p-3 rounded-xl bg-red-50 text-red-700 dark:bg-red-950/40 dark:text-red-300 text-xs font-bold border border-red-200 dark:border-red-900/30">
+                        {deactivateError}
+                      </div>
+                    )}
+
+                    <div className="flex justify-end gap-3 pt-3 border-t border-gray-100 dark:border-gray-800">
+                      <button
+                        onClick={() => setDeactivateModalOpen(false)}
+                        disabled={submittingDeactivation}
+                        className="px-5 py-2.5 rounded-xl bg-gray-100 dark:bg-gray-800 text-gray-700 dark:text-gray-200 text-xs font-black uppercase transition-all"
+                      >
+                        Cancelar
+                      </button>
+                      <button
+                        onClick={handleConfirmDeactivate}
+                        disabled={submittingDeactivation || !deactivateReason.trim()}
+                        className="inline-flex items-center gap-2 px-6 py-2.5 rounded-xl bg-amber-600 hover:bg-amber-700 text-white text-xs font-black uppercase disabled:opacity-50 transition-all shadow-md active:scale-95"
+                      >
+                        {submittingDeactivation ? <Loader2 className="h-4 w-4 animate-spin" /> : <PowerOff className="h-4 w-4" />}
+                        Confirmar Desativação
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {/* MODAL 2: CONFIRMAÇÃO DE REATIVAÇÃO SEGURA (PROMPT 51) */}
+              {reactivateModalOpen && lojaToReactivate && (
+                <div className="fixed inset-0 z-[75] bg-black/75 backdrop-blur-sm p-4 flex items-center justify-center animate-in fade-in duration-200">
+                  <div className="w-full max-w-lg bg-white dark:bg-gray-900 rounded-[2.5rem] p-7 md:p-8 border border-gray-100 dark:border-gray-800 shadow-2xl space-y-6">
+                    <div className="flex items-start justify-between gap-3 border-b border-gray-100 dark:border-gray-800 pb-4">
+                      <div className="flex items-center gap-3">
+                        <div className="p-3 bg-green-50 dark:bg-green-950/40 rounded-2xl text-green-600">
+                          <RotateCcw className="h-6 w-6" />
+                        </div>
+                        <div>
+                          <h4 className="text-xl font-black text-gray-900 dark:text-white uppercase tracking-tight">
+                            Reativar Unidade Oficial
+                          </h4>
+                          <p className="text-xs text-green-600 dark:text-green-400 font-bold uppercase">
+                            Reintegração na rede oficial Gigante Pneus
+                          </p>
+                        </div>
+                      </div>
+                      <button
+                        onClick={() => setReactivateModalOpen(false)}
+                        className="p-2 rounded-xl text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-800"
+                      >
+                        <X className="h-5 w-5" />
+                      </button>
+                    </div>
+
+                    <div className="p-4 bg-gray-50 dark:bg-gray-800/60 rounded-2xl border border-gray-200 dark:border-gray-700 space-y-1">
+                      <div className="text-xs font-bold text-gray-500 uppercase tracking-wider">Unidade</div>
+                      <div className="text-base font-black text-gray-900 dark:text-white uppercase">{lojaToReactivate.nome}</div>
+                      <div className="text-xs text-gray-600 dark:text-gray-300 font-semibold">{lojaToReactivate.cidade} - {lojaToReactivate.estado}</div>
+                    </div>
+
+                    <div className="p-4 bg-blue-50 dark:bg-blue-950/20 rounded-2xl border border-blue-200 dark:border-blue-900/30 text-xs text-blue-900 dark:text-blue-300 space-y-2 leading-relaxed">
+                      <div className="font-black uppercase flex items-center gap-1.5">
+                        <Info className="h-4 w-4 shrink-0 text-blue-600" /> Regra de Segurança da Franqueadora:
+                      </div>
+                      <p className="text-[11px]">
+                        A reativação restabelece a unidade na rede e permite o cadastro de novas oportunidades. 
+                        <strong> As vagas antigas desta unidade NÃO serão republicadas automaticamente</strong> para evitar divulgação de cargos obsoletos. O RH poderá revisá-las e publicá-las individualmente na aba de Vagas.
+                      </p>
+                    </div>
+
+                    {reactivateError && (
+                      <div className="p-3 rounded-xl bg-red-50 text-red-700 dark:bg-red-950/40 dark:text-red-300 text-xs font-bold border border-red-200 dark:border-red-900/30">
+                        {reactivateError}
+                      </div>
+                    )}
+
+                    <div className="flex justify-end gap-3 pt-3 border-t border-gray-100 dark:border-gray-800">
+                      <button
+                        onClick={() => setReactivateModalOpen(false)}
+                        disabled={submittingReactivation}
+                        className="px-5 py-2.5 rounded-xl bg-gray-100 dark:bg-gray-800 text-gray-700 dark:text-gray-200 text-xs font-black uppercase transition-all"
+                      >
+                        Cancelar
+                      </button>
+                      <button
+                        onClick={handleConfirmReactivate}
+                        disabled={submittingReactivation}
+                        className="inline-flex items-center gap-2 px-6 py-2.5 rounded-xl bg-green-600 hover:bg-green-700 text-white text-xs font-black uppercase disabled:opacity-50 transition-all shadow-md active:scale-95"
+                      >
+                        {submittingReactivation ? <Loader2 className="h-4 w-4 animate-spin" /> : <RotateCcw className="h-4 w-4" />}
+                        Confirmar Reativação
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {/* MODAL 3: CADASTRO / EDIÇÃO DE LOJA (Sem qualquer opção de exclusão definitiva) */}
               {lojaModalOpen && (
                 <div className="fixed inset-0 z-[70] bg-black/70 backdrop-blur-sm p-4 flex items-center justify-center animate-in fade-in duration-200">
                   <div className="w-full max-w-2xl max-h-[90vh] overflow-y-auto bg-white dark:bg-gray-900 rounded-[2.5rem] p-8 border border-gray-100 dark:border-gray-800 space-y-6 shadow-2xl">
