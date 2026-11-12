@@ -47,26 +47,30 @@ export interface VisualizarCurriculoResult {
 export async function handleVisualizarCurriculo(
   params: VisualizarCurriculoParams
 ): Promise<VisualizarCurriculoResult> {
-  const { curriculoId, fileId, token, clientIp, userAgent } = params;
+  const cleanToken = params.token?.trim();
+  const cleanCurriculoId = params.curriculoId?.trim() || undefined;
+  const cleanFileId = params.fileId?.trim() || undefined;
+  const clientIp = params.clientIp;
+  const userAgent = params.userAgent;
 
-  if (!token) {
+  if (!cleanToken) {
     return {
       statusCode: 401,
       error: 'ACESSO_NEGADO: Token de autenticação não fornecido. Acesso restrito a recrutadores autenticados.'
     };
   }
 
-  if (!curriculoId && !fileId) {
+  if (!cleanCurriculoId && !cleanFileId) {
     return {
       statusCode: 400,
-      error: 'PARAMETRO_INVALIDO: Informe curriculoId ou fileId.'
+      error: 'PARAMETRO_INVALIDO: Informe curriculoId ou fileId válido.'
     };
   }
 
   const supabaseAdmin = getSupabaseAdmin();
 
   // 1. Valida o token JWT com Supabase Auth
-  const { data: userData, error: userError } = await supabaseAdmin.auth.getUser(token);
+  const { data: userData, error: userError } = await supabaseAdmin.auth.getUser(cleanToken);
   if (userError || !userData?.user) {
     return {
       statusCode: 401,
@@ -104,10 +108,10 @@ export async function handleVisualizarCurriculo(
     .from('candidato_curriculos')
     .select('id, candidato_id, google_drive_file_id, nome_arquivo, mime_type, tamanho_bytes');
 
-  if (curriculoId) {
-    query = query.eq('id', curriculoId);
-  } else if (fileId) {
-    query = query.eq('google_drive_file_id', fileId);
+  if (cleanCurriculoId) {
+    query = query.eq('id', cleanCurriculoId);
+  } else if (cleanFileId) {
+    query = query.eq('google_drive_file_id', cleanFileId);
   }
 
   const { data: currRow, error: currErr } = await query.maybeSingle();
@@ -232,9 +236,12 @@ export default async function vercelHandler(req: any, res: any) {
     const bearerToken = typeof authHeader === 'string' && authHeader.startsWith('Bearer ')
       ? authHeader.slice(7)
       : null;
-    const token = bearerToken || (req.query?.token as string) || undefined;
-    const curriculoId = (req.query?.id as string) || (req.query?.curriculoId as string) || undefined;
-    const fileId = (req.query?.fileId as string) || undefined;
+
+    const urlObj = new URL(req.url || '/api/curriculos/visualizar', 'http://localhost');
+
+    const token = (bearerToken || (req.query?.token as string) || urlObj.searchParams.get('token') || '').trim() || undefined;
+    const curriculoId = ((req.query?.id as string) || (req.query?.curriculoId as string) || urlObj.searchParams.get('id') || urlObj.searchParams.get('curriculoId') || '').trim() || undefined;
+    const fileId = ((req.query?.fileId as string) || urlObj.searchParams.get('fileId') || '').trim() || undefined;
     const clientIp = (req.headers?.['x-forwarded-for'] as string)?.split(',')[0].trim() ||
       req.socket?.remoteAddress ||
       '127.0.0.1';

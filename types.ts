@@ -17,6 +17,8 @@ export interface Candidato {
   curriculo_url: string; // URL do MinIO / Google Drive
   curriculo_id?: string;
   curriculo_file_id?: string;
+  curriculo_nome_arquivo?: string;
+  candidatura_id?: string;
   created_at: string;
 }
 

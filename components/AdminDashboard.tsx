@@ -233,16 +233,28 @@ const AdminDashboard: React.FC = () => {
 
   const handleVerCurriculo = async (cand: Candidato) => {
     try {
+      const targetId = cand.curriculo_id?.trim();
+      const targetFileId = cand.curriculo_file_id?.trim();
+
+      if (!targetId && !targetFileId) {
+        alert('Nenhum currículo em anexo foi localizado para esta candidatura.');
+        return;
+      }
+
       const { data: { session } } = await supabase.auth.getSession();
       const token = session?.access_token || '';
-      const fileParam = cand.curriculo_id
-        ? `id=${encodeURIComponent(cand.curriculo_id)}`
-        : `fileId=${encodeURIComponent(cand.curriculo_file_id || '')}`;
+
+      const fileParam = targetId
+        ? `id=${encodeURIComponent(targetId)}`
+        : `fileId=${encodeURIComponent(targetFileId!)}`;
+
       const url = `/api/curriculos/visualizar?${fileParam}&token=${encodeURIComponent(token)}`;
       window.open(url, '_blank');
     } catch {
       if (cand.curriculo_url) {
         window.open(cand.curriculo_url, '_blank');
+      } else {
+        alert('Não foi possível abrir o currículo no momento.');
       }
     }
   };
@@ -299,13 +311,18 @@ const AdminDashboard: React.FC = () => {
       flatCandidatos = candAppRows.map((row: any) => {
         const cand = row.candidatos || {};
         const loja = row.lojas || {};
-        const curr = Array.isArray(row.candidato_curriculos) && row.candidato_curriculos.length > 0
-          ? row.candidato_curriculos[0]
-          : null;
+        const rawCurr = row.candidato_curriculos;
+        const curr = Array.isArray(rawCurr)
+          ? (rawCurr[0] ?? null)
+          : (rawCurr ?? null);
 
         const cidadeFormatada = loja.cidade
           ? `${loja.cidade}${loja.estado ? ' - ' + loja.estado : ''}`
           : (cand.cidade || 'Corporativo');
+
+        const curriculoId = curr?.id || '';
+        const curriculoFileId = curr?.google_drive_file_id || '';
+        const curriculoNome = curr?.nome_arquivo || '';
 
         return {
           id: cand.id || row.id,
@@ -320,9 +337,12 @@ const AdminDashboard: React.FC = () => {
           linkedin_url: cand.linkedin_url || '',
           aceita_outras_vagas: cand.aceita_outras_vagas || false,
           resumo: cand.resumo || '',
-          curriculo_id: curr?.id || '',
-          curriculo_file_id: curr?.google_drive_file_id || '',
-          curriculo_url: curr ? `/api/curriculos/visualizar?id=${curr.id}` : '',
+          curriculo_id: curriculoId,
+          curriculo_file_id: curriculoFileId,
+          curriculo_nome_arquivo: curriculoNome,
+          curriculo_url: curriculoId
+            ? `/api/curriculos/visualizar?id=${curriculoId}`
+            : (curriculoFileId ? `/api/curriculos/visualizar?fileId=${curriculoFileId}` : ''),
           created_at: row.criado_em || cand.criado_em || new Date().toISOString()
         } as Candidato;
       });
