@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect } from 'react';
 import { HashRouter as Router, Routes, Route, Link, Navigate } from 'react-router-dom';
 import PublicForm from './components/PublicForm';
@@ -7,6 +6,7 @@ import PublicJobsBoard from './components/PublicJobsBoard';
 import PublicJobDetails from './components/PublicJobDetails';
 import AdminDashboard from './components/AdminDashboard';
 import Login from './components/Login';
+import ResetPassword from './components/ResetPassword';
 import GoogleConnectAdmin from './components/GoogleConnectAdmin';
 import { supabase } from './supabase';
 import { User } from '@supabase/supabase-js';
@@ -18,6 +18,7 @@ const App: React.FC = () => {
   const [user, setUser] = useState<User | null>(null);
   const [loading, setLoading] = useState(true);
   const [darkMode, setDarkMode] = useState(() => localStorage.getItem('theme') === 'dark');
+  const [isPasswordRecoveryMode, setIsPasswordRecoveryMode] = useState(false);
 
   useEffect(() => {
     if (darkMode) {
@@ -30,13 +31,42 @@ const App: React.FC = () => {
   }, [darkMode]);
 
   useEffect(() => {
+    // 1. Detecta tokens de recuperação nos parâmetros da URL (tanto query quanto hash fragment)
+    const checkHashAndUrlTokens = () => {
+      const fullUrl = window.location.href;
+      const searchParams = new URLSearchParams(window.location.search);
+      const hash = window.location.hash || '';
+
+      const isRecoveryType = searchParams.get('type') === 'recovery' || hash.includes('type=recovery');
+
+      // Se o Supabase redirecionar com fragmento contendo access_token e type=recovery na raiz
+      if (isRecoveryType && !hash.startsWith('#/redefinir-senha')) {
+        setIsPasswordRecoveryMode(true);
+        // Redireciona internamente para a rota de redefinição de senha mantendo os tokens
+        window.location.hash = '#/redefinir-senha';
+      }
+    };
+
+    checkHashAndUrlTokens();
+
+    // 2. Consulta a sessão atual
     supabase.auth.getSession().then(({ data: { session } }) => {
       setUser(session?.user ?? null);
       setLoading(false);
     });
 
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
+    // 3. Listener para eventos de autenticação e recuperação de senha
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
       setUser(session?.user ?? null);
+
+      if (event === 'PASSWORD_RECOVERY') {
+        setIsPasswordRecoveryMode(true);
+        window.location.hash = '#/redefinir-senha';
+      }
+
+      if (event === 'SIGNED_OUT') {
+        setIsPasswordRecoveryMode(false);
+      }
     });
 
     return () => subscription.unsubscribe();
@@ -45,6 +75,7 @@ const App: React.FC = () => {
   const handleLogout = async () => {
     await supabase.auth.signOut();
     setUser(null);
+    setIsPasswordRecoveryMode(false);
     localStorage.removeItem('abucci_mock_user');
   };
 
@@ -85,7 +116,7 @@ const App: React.FC = () => {
                   {darkMode ? <Sun className="h-5 w-5" /> : <Moon className="h-5 w-5" />}
                 </button>
 
-                {activeUser ? (
+                {activeUser && !isPasswordRecoveryMode ? (
                   <div className="flex items-center gap-4">
                     <Link to="/admin" className="text-gray-700 dark:text-gray-300 hover:text-red-600 dark:hover:text-red-400 transition-colors flex items-center gap-1 text-sm font-semibold">
                       <LayoutDashboard className="h-4 w-4" />
@@ -122,8 +153,31 @@ const App: React.FC = () => {
             <Route path="/cadastro" element={<PublicForm />} />
             <Route path="/pesquisa/:id" element={<PublicSurvey />} />
             <Route path="/admin/google-connect" element={<GoogleConnectAdmin />} />
-            <Route path="/login" element={activeUser ? <Navigate to="/admin" /> : <Login />} />
-            <Route path="/admin" element={activeUser ? <AdminDashboard /> : <Navigate to="/login" />} />
+            <Route path="/redefinir-senha" element={<ResetPassword onSuccess={() => setIsPasswordRecoveryMode(false)} />} />
+            <Route 
+              path="/login" 
+              element={
+                isPasswordRecoveryMode ? (
+                  <Navigate to="/redefinir-senha" replace />
+                ) : activeUser ? (
+                  <Navigate to="/admin" replace />
+                ) : (
+                  <Login />
+                )
+              } 
+            />
+            <Route 
+              path="/admin" 
+              element={
+                isPasswordRecoveryMode ? (
+                  <Navigate to="/redefinir-senha" replace />
+                ) : activeUser ? (
+                  <AdminDashboard />
+                ) : (
+                  <Navigate to="/login" replace />
+                )
+              } 
+            />
             <Route path="*" element={<PublicJobsBoard />} />
           </Routes>
         </main>

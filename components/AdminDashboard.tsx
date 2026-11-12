@@ -6,7 +6,7 @@ import {
   Eye, Download, MapPin, X, Loader2, Plus, Trash2, TrendingUp, ShieldCheck, Calendar,
   Link2, Copy, CheckCheck, ChevronLeft, ToggleLeft, ToggleRight, FileText, Hash, AlignLeft, ListChecks, Star,
   Share2, ExternalLink, MessageCircle, Brain, Award, Zap, Check, AlertTriangle, ThumbsUp, ThumbsDown, RefreshCw,
-  KeyRound, Lock, EyeOff, Shield
+  KeyRound, Lock, EyeOff, Shield, Folder
 } from 'lucide-react';
 import { analyzeSurveyResponses, analyzeTalentCompatibility, listAvailableGeminiModels, AIAnalysisResult, TalentAnalysisResult, DEFAULT_PROMPT_SURVEYS, DEFAULT_PROMPT_TALENTS } from '../aiService';
 import { createDefaultJobLanding, parseJobLandingFromRequisitos, serializeJobLanding, toLines } from '../jobsService';
