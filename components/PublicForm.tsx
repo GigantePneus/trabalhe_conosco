@@ -280,15 +280,33 @@ const PublicForm: React.FC = () => {
         body: JSON.stringify(payload)
       });
 
-      const responseData = await res.json();
+      let responseData: any = null;
+      const contentType = res.headers.get('content-type') || '';
 
-      if (!res.ok || !responseData.success) {
+      if (contentType.includes('application/json')) {
+        try {
+          responseData = await res.json();
+        } catch (jsonErr) {
+          console.warn('[PublicForm] Resposta declarada como JSON mas inválida:', jsonErr);
+        }
+      } else {
+        const rawText = await res.text();
+        console.warn('[PublicForm] Resposta não-JSON retornada pelo servidor (status ' + res.status + '):', rawText.slice(0, 150));
+      }
+
+      if (!res.ok || !responseData || !responseData.success) {
         if (res.status === 502 || res.status === 504) {
           setSubmissionState('resend_needed');
-          setErrorDetails(responseData.mensagem || 'Falha transitória na comunicação. Por favor, reenvie.');
+          setErrorDetails(responseData?.mensagem || 'Instabilidade temporária na conexão. Por favor, tente reenviar.');
           return;
         }
-        throw new Error(responseData.mensagem || 'Falha ao processar candidatura.');
+
+        const userMessage = responseData?.mensagem ||
+          (res.status >= 500
+            ? 'Ocorreu uma instabilidade temporária no servidor. Por favor, tente enviar novamente em instantes.'
+            : 'Não foi possível validar seus dados. Por favor, revise as informações preenchidas.');
+
+        throw new Error(userMessage);
       }
 
       setConfirmedProtocolo(responseData.protocolo);

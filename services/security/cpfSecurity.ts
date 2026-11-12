@@ -59,7 +59,7 @@ export function maskCpf(cleanCpf: string): string {
  * Garante unicidade e indexação O(1) sem expor o CPF em texto puro
  */
 export function generateCpfHash(cleanCpf: string, secretOverride?: string): string {
-  const secret = secretOverride || process.env.CPF_HMAC_SECRET;
+  const secret = secretOverride || process.env.CPF_HMAC_SECRET || (process.env.NODE_ENV !== 'production' ? 'dev-hmac-secret-gigante-pneus-local' : '');
   if (!secret) {
     throw new Error('CONFIG_ERROR: CPF_HMAC_SECRET não está configurado nas variáveis de ambiente do servidor.');
   }

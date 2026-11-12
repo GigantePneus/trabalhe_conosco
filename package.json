@@ -5,7 +5,10 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
-    "build": "vite build",
+    "build": "node scripts/build-serverless.mjs && vite build",
+    "build:client": "vite build",
+    "build:serverless": "node scripts/build-serverless.mjs",
+    "test:serverless": "node scripts/test-serverless.mjs",
     "preview": "vite preview"
   },
   "dependencies": {

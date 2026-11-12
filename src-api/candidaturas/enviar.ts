@@ -491,12 +491,19 @@ export async function handleCandidatura(
 
 /**
  * Handler padrão para Vercel Serverless Function
+ * Garante retorno de JSON padronizado e tratamento robusto de exceções
  */
 export default async function vercelHandler(req: any, res: any) {
   try {
+    // Garantir sempre cabeçalho de resposta JSON
+    res.setHeader('Content-Type', 'application/json; charset=utf-8');
+
     if (req.method !== 'POST') {
       res.setHeader('Allow', ['POST']);
-      return res.status(405).json({ success: false, mensagem: `Método ${req.method} não permitido.` });
+      return res.status(405).json({
+        success: false,
+        mensagem: `Método ${req.method} não permitido. Utilize o método POST.`
+      });
     }
 
     const clientIp = req.headers['x-forwarded-for']?.toString().split(',')[0].trim() ||
@@ -507,12 +514,22 @@ export default async function vercelHandler(req: any, res: any) {
     if (typeof body === 'string') {
       try {
         body = JSON.parse(body);
-      } catch {
-        // payload json bruto
+      } catch (parseErr) {
+        return res.status(400).json({
+          success: false,
+          mensagem: 'Formato de requisição inválido. Envie os dados em formato JSON válido.'
+        });
       }
     }
 
-    const result = await handleCandidatura(body || {}, clientIp);
+    if (!body || typeof body !== 'object') {
+      return res.status(400).json({
+        success: false,
+        mensagem: 'Corpo da requisição ausente ou inválido.'
+      });
+    }
+
+    const result = await handleCandidatura(body, clientIp);
 
     if (result.statusCode === 503 || result.statusCode === 429) {
       res.setHeader('Retry-After', '30');
@@ -520,11 +537,13 @@ export default async function vercelHandler(req: any, res: any) {
 
     return res.status(result.statusCode).json(result.data);
   } catch (criticalErr: any) {
-    console.error('[VercelHandler][CriticalException]', criticalErr);
+    // Registro técnico seguro no servidor sem expor dados pessoais do candidato
+    console.error('[VercelHandler][CriticalException]', criticalErr?.message || criticalErr);
+    
+    // Retorno de JSON padronizado e amigável ao usuário
     return res.status(500).json({
       success: false,
-      mensagem: 'Falha interna no processamento da candidatura pelo servidor.',
-      detalhes: criticalErr?.message || 'Erro inesperado'
+      mensagem: 'Não foi possível concluir o envio da sua candidatura no momento. Por favor, tente novamente em alguns instantes.'
     });
   }
 }
