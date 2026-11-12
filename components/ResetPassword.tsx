@@ -13,7 +13,7 @@ const ResetPassword: React.FC<ResetPasswordProps> = ({ onSuccess }) => {
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
   const [loading, setLoading] = useState(false);
   const [checkingSession, setCheckingSession] = useState(true);
-  const [hasValidSession, setHasValidSession] = useState(false);
+  const [isRecoveryFlow, setIsRecoveryFlow] = useState(false);
   const [userEmail, setUserEmail] = useState('');
   const [statusMsg, setStatusMsg] = useState<{ text: string; type: 'success' | 'error' | '' }>({ text: '', type: '' });
   const [completed, setCompleted] = useState(false);
@@ -21,30 +21,80 @@ const ResetPassword: React.FC<ResetPasswordProps> = ({ onSuccess }) => {
   useEffect(() => {
     let mounted = true;
 
-    const verifyRecoverySession = async () => {
+    const parseAndEstablishRecovery = async () => {
       try {
+        // 1. Verifica se a flag de recuperação foi sinalizada pelo App.tsx
+        const hasSessionFlag = sessionStorage.getItem('gigante_recovery_mode') === 'true';
+
+        // 2. Verifica se a URL contém tokens de recuperação (hash ou search)
+        const fullUrl = window.location.href;
+        const searchParams = new URLSearchParams(window.location.search);
+        const hash = window.location.hash || '';
+        
+        let hashParams = new URLSearchParams();
+        if (hash.includes('#')) {
+          const parts = hash.split('#');
+          for (const p of parts) {
+            if (p.includes('=')) {
+              const sp = new URLSearchParams(p);
+              sp.forEach((v, k) => hashParams.set(k, v));
+            }
+          }
+        }
+
+        const isRecoveryExplicit = 
+          searchParams.get('type') === 'recovery' ||
+          hashParams.get('type') === 'recovery' ||
+          fullUrl.includes('type=recovery') ||
+          hasSessionFlag;
+
+        // Se houver access_token e refresh_token no hash, garante que o Supabase registre a sessão
+        const accessToken = hashParams.get('access_token');
+        const refreshToken = hashParams.get('refresh_token');
+
+        if (accessToken && refreshToken) {
+          await supabase.auth.setSession({
+            access_token: accessToken,
+            refresh_token: refreshToken
+          });
+          sessionStorage.setItem('gigante_recovery_mode', 'true');
+        }
+
+        // Se houver código PKCE (?code=...) na URL de callback
+        const code = searchParams.get('code');
+        if (code) {
+          const { error: codeErr } = await supabase.auth.exchangeCodeForSession(code);
+          if (!codeErr) {
+            sessionStorage.setItem('gigante_recovery_mode', 'true');
+          }
+        }
+
+        // 3. Valida a sessão no Supabase Auth
         const { data: { session } } = await supabase.auth.getSession();
         if (!mounted) return;
 
-        if (session && session.user) {
-          setHasValidSession(true);
+        // Requisito de Segurança: Apenas autoriza se for fluxo legítimo de recuperação
+        if (session && session.user && (isRecoveryExplicit || sessionStorage.getItem('gigante_recovery_mode') === 'true')) {
+          setIsRecoveryFlow(true);
           setUserEmail(session.user.email || '');
         } else {
-          setHasValidSession(false);
+          setIsRecoveryFlow(false);
         }
-      } catch {
-        if (mounted) setHasValidSession(false);
+      } catch (err) {
+        if (mounted) setIsRecoveryFlow(false);
       } finally {
         if (mounted) setCheckingSession(false);
       }
     };
 
-    verifyRecoverySession();
+    parseAndEstablishRecovery();
 
+    // 4. Listener para o evento nativo PASSWORD_RECOVERY do Supabase
     const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
       if (!mounted) return;
-      if (event === 'PASSWORD_RECOVERY' || (session && session.user)) {
-        setHasValidSession(true);
+      if (event === 'PASSWORD_RECOVERY') {
+        sessionStorage.setItem('gigante_recovery_mode', 'true');
+        setIsRecoveryFlow(true);
         setUserEmail(session?.user?.email || '');
         setCheckingSession(false);
       }
@@ -101,6 +151,9 @@ const ResetPassword: React.FC<ResetPasswordProps> = ({ onSuccess }) => {
         throw error;
       }
 
+      // Limpa os marcadores de recuperação
+      sessionStorage.removeItem('gigante_recovery_mode');
+
       setCompleted(true);
       setStatusMsg({
         text: 'Sua senha foi redefinida com sucesso! Você já pode acessar o Painel RH.',
@@ -108,8 +161,9 @@ const ResetPassword: React.FC<ResetPasswordProps> = ({ onSuccess }) => {
       });
       setNewPassword('');
       setConfirmPassword('');
+
       if (onSuccess) {
-        setTimeout(() => onSuccess(), 2000);
+        setTimeout(() => onSuccess(), 1500);
       }
     } catch (err: any) {
       setStatusMsg({
@@ -133,7 +187,8 @@ const ResetPassword: React.FC<ResetPasswordProps> = ({ onSuccess }) => {
     );
   }
 
-  if (!hasValidSession) {
+  // Segurança estrita: Sem fluxo comprovado de recuperação, bloqueia redefinição
+  if (!isRecoveryFlow) {
     return (
       <div className="min-h-[calc(100vh-160px)] flex items-center justify-center px-4 py-12">
         <div className="bg-white dark:bg-gray-900 p-10 rounded-3xl shadow-2xl border border-gray-100 dark:border-gray-800 text-center max-w-md w-full space-y-6">
@@ -142,8 +197,8 @@ const ResetPassword: React.FC<ResetPasswordProps> = ({ onSuccess }) => {
           </div>
           <div>
             <h2 className="text-2xl font-black uppercase text-gray-900 dark:text-white tracking-tight">Link Expirado ou Inválido</h2>
-            <p className="text-xs text-gray-500 dark:text-gray-400 font-medium mt-2">
-              Não identificamos uma sessão ativa de recuperação de senha. O link recebido por e-mail pode ter expirado ou já ter sido utilizado.
+            <p className="text-xs text-gray-500 dark:text-gray-400 font-medium mt-2 leading-relaxed">
+              Não identificamos uma solicitação ativa de recuperação de senha. O link recebido por e-mail pode ter expirado ou já ter sido utilizado.
             </p>
           </div>
           <a
@@ -169,7 +224,7 @@ const ResetPassword: React.FC<ResetPasswordProps> = ({ onSuccess }) => {
             </div>
             <h1 className="text-3xl font-extrabold text-gray-900 dark:text-white uppercase tracking-tighter">Nova Senha</h1>
             <p className="text-gray-500 dark:text-gray-400 font-bold text-xs mt-2 uppercase tracking-widest">
-              Defina a credencial de acesso do usuário
+              Defina a nova credencial de acesso
             </p>
             {userEmail && (
               <div className="mt-3 inline-block bg-gray-100 dark:bg-gray-800 px-3 py-1 rounded-full text-xs font-mono font-bold text-gray-700 dark:text-gray-300">
@@ -254,7 +309,7 @@ const ResetPassword: React.FC<ResetPasswordProps> = ({ onSuccess }) => {
                 </div>
               </div>
 
-              {/* Regras de Senha Forte */}
+              {/* Requisitos de Senha Forte */}
               <div className="p-4 bg-gray-50 dark:bg-gray-800/60 rounded-2xl border border-gray-100 dark:border-gray-800 text-[11px] text-gray-500 dark:text-gray-400 space-y-1">
                 <div className="font-black uppercase tracking-wider text-gray-700 dark:text-gray-300">Requisitos da senha:</div>
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-1 font-medium">

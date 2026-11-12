@@ -31,23 +31,62 @@ const App: React.FC = () => {
   }, [darkMode]);
 
   useEffect(() => {
-    // 1. Detecta tokens de recuperação nos parâmetros da URL (tanto query quanto hash fragment)
-    const checkHashAndUrlTokens = () => {
+    // 1. Tratamento e captura de tokens de recuperação do Supabase
+    const handleUrlTokensAndRecovery = async () => {
       const fullUrl = window.location.href;
+      const pathname = window.location.pathname;
       const searchParams = new URLSearchParams(window.location.search);
       const hash = window.location.hash || '';
 
-      const isRecoveryType = searchParams.get('type') === 'recovery' || hash.includes('type=recovery');
+      // Extrai parâmetros do fragmento hash caso existam
+      let hashParams = new URLSearchParams();
+      if (hash.includes('#')) {
+        const parts = hash.split('#');
+        for (const p of parts) {
+          if (p.includes('=')) {
+            const sp = new URLSearchParams(p);
+            sp.forEach((v, k) => hashParams.set(k, v));
+          }
+        }
+      }
 
-      // Se o Supabase redirecionar com fragmento contendo access_token e type=recovery na raiz
-      if (isRecoveryType && !hash.startsWith('#/redefinir-senha')) {
+      const isRecovery = 
+        pathname === '/reset-password' ||
+        pathname.startsWith('/reset-password') ||
+        searchParams.get('type') === 'recovery' ||
+        hashParams.get('type') === 'recovery' ||
+        fullUrl.includes('type=recovery');
+
+      if (isRecovery) {
         setIsPasswordRecoveryMode(true);
-        // Redireciona internamente para a rota de redefinição de senha mantendo os tokens
-        window.location.hash = '#/redefinir-senha';
+        sessionStorage.setItem('gigante_recovery_mode', 'true');
+
+        // Se o Supabase enviou tokens no hash, inicializa explicitamente a sessão
+        const accessToken = hashParams.get('access_token');
+        const refreshToken = hashParams.get('refresh_token');
+        if (accessToken && refreshToken) {
+          await supabase.auth.setSession({
+            access_token: accessToken,
+            refresh_token: refreshToken
+          });
+        }
+
+        // Se o Supabase enviou código PKCE (?code=...)
+        const code = searchParams.get('code');
+        if (code) {
+          await supabase.auth.exchangeCodeForSession(code);
+        }
+
+        // Se o pathname não for a raiz, normaliza a rota no HashRouter para #/reset-password
+        if (window.location.hash !== '#/reset-password') {
+          window.location.hash = '#/reset-password';
+        }
+      } else if (sessionStorage.getItem('gigante_recovery_mode') === 'true') {
+        setIsPasswordRecoveryMode(true);
       }
     };
 
-    checkHashAndUrlTokens();
+    handleUrlTokensAndRecovery();
 
     // 2. Consulta a sessão atual
     supabase.auth.getSession().then(({ data: { session } }) => {
@@ -55,17 +94,19 @@ const App: React.FC = () => {
       setLoading(false);
     });
 
-    // 3. Listener para eventos de autenticação e recuperação de senha
+    // 3. Listener para eventos de autenticação
     const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
       setUser(session?.user ?? null);
 
       if (event === 'PASSWORD_RECOVERY') {
         setIsPasswordRecoveryMode(true);
-        window.location.hash = '#/redefinir-senha';
+        sessionStorage.setItem('gigante_recovery_mode', 'true');
+        window.location.hash = '#/reset-password';
       }
 
       if (event === 'SIGNED_OUT') {
         setIsPasswordRecoveryMode(false);
+        sessionStorage.removeItem('gigante_recovery_mode');
       }
     });
 
@@ -76,6 +117,7 @@ const App: React.FC = () => {
     await supabase.auth.signOut();
     setUser(null);
     setIsPasswordRecoveryMode(false);
+    sessionStorage.removeItem('gigante_recovery_mode');
     localStorage.removeItem('abucci_mock_user');
   };
 
@@ -153,12 +195,20 @@ const App: React.FC = () => {
             <Route path="/cadastro" element={<PublicForm />} />
             <Route path="/pesquisa/:id" element={<PublicSurvey />} />
             <Route path="/admin/google-connect" element={<GoogleConnectAdmin />} />
-            <Route path="/redefinir-senha" element={<ResetPassword onSuccess={() => setIsPasswordRecoveryMode(false)} />} />
+            {/* Suporte simultâneo a /reset-password e /redefinir-senha */}
+            <Route 
+              path="/reset-password" 
+              element={<ResetPassword onSuccess={() => setIsPasswordRecoveryMode(false)} />} 
+            />
+            <Route 
+              path="/redefinir-senha" 
+              element={<ResetPassword onSuccess={() => setIsPasswordRecoveryMode(false)} />} 
+            />
             <Route 
               path="/login" 
               element={
                 isPasswordRecoveryMode ? (
-                  <Navigate to="/redefinir-senha" replace />
+                  <Navigate to="/reset-password" replace />
                 ) : activeUser ? (
                   <Navigate to="/admin" replace />
                 ) : (
@@ -170,7 +220,7 @@ const App: React.FC = () => {
               path="/admin" 
               element={
                 isPasswordRecoveryMode ? (
-                  <Navigate to="/redefinir-senha" replace />
+                  <Navigate to="/reset-password" replace />
                 ) : activeUser ? (
                   <AdminDashboard />
                 ) : (

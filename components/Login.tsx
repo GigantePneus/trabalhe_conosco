@@ -40,21 +40,21 @@ const Login: React.FC = () => {
     setForgotError(null);
 
     try {
-      // Determina a URL base atual do ambiente (ex: https://trabalheconosco-one.vercel.app ou http://localhost:3000)
+      // Determina a URL base oficial (ex: https://trabalheconosco.gigantepneus.com.br ou https://trabalheconosco-one.vercel.app ou local)
       const currentOrigin = window.location.origin;
-      // Redireciona explicitamente para a rota de redefinição de senha da aplicação
-      const redirectTo = `${currentOrigin}/#/redefinir-senha`;
+      // Redireciona para o pathname limpo /reset-password (SEM hash fragment # no redirectTo),
+      // garantindo que o Supabase anexe os tokens com segurança sem truncamento do roteador.
+      const redirectTo = `${currentOrigin}/reset-password`;
 
       const { error } = await supabase.auth.resetPasswordForEmail(forgotEmail.trim().toLowerCase(), {
         redirectTo
       });
 
       if (error) {
-        // Log para depuração interna segura sem expor dados sensíveis
         console.error('Falha ao solicitar recuperação:', error.message);
       }
 
-      // SEMPRE exibe mensagem genérica de sucesso para evitar enumeração de usuários cadastrados
+      // SEMPRE exibe mensagem genérica de confirmação para prevenir enumeração de contas
       setForgotSubmitted(true);
     } catch (err: any) {
       setForgotSubmitted(true);
