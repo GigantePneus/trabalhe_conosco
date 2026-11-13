@@ -1125,34 +1125,52 @@ async function handleCandidatura(payload, clientIp = "127.0.0.1") {
         data: { success: false, mensagem: "Selecione ao menos uma vaga ou oportunidade de interesse." }
       };
     }
-    if (!payload.arquivo || !payload.arquivo.base64 || !payload.arquivo.nome) {
-      return {
-        statusCode: 400,
-        data: { success: false, mensagem: "O arquivo de curr\xEDculo (.pdf, .doc ou .docx) \xE9 obrigat\xF3rio." }
-      };
-    }
-    let fileBuffer;
-    try {
-      fileBuffer = Buffer.from(payload.arquivo.base64, "base64");
-    } catch {
-      return {
-        statusCode: 400,
-        data: { success: false, mensagem: "Codifica\xE7\xE3o de arquivo inv\xE1lida. O arquivo deve estar em Base64." }
-      };
-    }
-    const validationResult = validateCurriculoFile(
-      fileBuffer,
-      payload.arquivo.nome,
-      payload.arquivo.mimeType
-    );
-    if (!validationResult.valid) {
+    const apresentacaoPessoal = sanitizeString(payload.apresentacao_pessoal || payload.resumo);
+    if (!apresentacaoPessoal || apresentacaoPessoal.length < 80) {
       return {
         statusCode: 400,
         data: {
           success: false,
-          mensagem: validationResult.error || "Arquivo inv\xE1lido."
+          mensagem: 'A apresenta\xE7\xE3o pessoal ("Conte um pouco sobre voc\xEA") \xE9 obrigat\xF3ria e deve ter no m\xEDnimo 80 caracteres.'
         }
       };
+    }
+    if (apresentacaoPessoal.length > 2e3) {
+      return {
+        statusCode: 400,
+        data: {
+          success: false,
+          mensagem: "A apresenta\xE7\xE3o pessoal n\xE3o pode exceder 2.000 caracteres."
+        }
+      };
+    }
+    let fileBuffer = null;
+    let detectedMimeType = null;
+    const hasArquivo = Boolean(payload.arquivo && payload.arquivo.base64 && payload.arquivo.nome);
+    if (hasArquivo && payload.arquivo) {
+      try {
+        fileBuffer = Buffer.from(payload.arquivo.base64, "base64");
+      } catch {
+        return {
+          statusCode: 400,
+          data: { success: false, mensagem: "Codifica\xE7\xE3o de arquivo inv\xE1lida. O arquivo deve estar em Base64." }
+        };
+      }
+      const validationResult = validateCurriculoFile(
+        fileBuffer,
+        payload.arquivo.nome,
+        payload.arquivo.mimeType
+      );
+      if (!validationResult.valid) {
+        return {
+          statusCode: 400,
+          data: {
+            success: false,
+            mensagem: validationResult.error || "Arquivo de curr\xEDculo inv\xE1lido."
+          }
+        };
+      }
+      detectedMimeType = validationResult.detectedMimeType || "application/pdf";
     }
     const protocolo = gerarProtocoloCandidatura();
     const supabaseAdmin = getSupabaseAdmin();
@@ -1194,28 +1212,30 @@ async function handleCandidatura(payload, clientIp = "127.0.0.1") {
         console.warn("[Backend] Verifica\xE7\xE3o pr\xE9via de duplicidade contornada:", dupCheckErr);
       }
     }
-    let driveUpload;
-    try {
-      driveUpload = await googleDriveStorage.uploadFile({
-        buffer: fileBuffer,
-        originalName: payload.arquivo.nome,
-        mimeType: validationResult.detectedMimeType || "application/pdf",
-        lojaId: vagasList[0]?.loja_id || null,
-        simulateFailure: payload.arquivo.simulateFailure === true
-      });
-    } catch (driveErr) {
-      console.error("[Backend] Falha no armazenamento externo:", driveErr.message);
-      return {
-        statusCode: 502,
-        data: {
-          success: false,
-          mensagem: "Falha tempor\xE1ria ao comunicar com o servidor de armazenamento seguro. Por favor, tente enviar novamente.",
-          detalhes: "O upload para o reposit\xF3rio de arquivos falhou. Nenhum registro foi gravado no banco de dados."
-        }
-      };
+    let driveUpload = null;
+    if (hasArquivo && fileBuffer && payload.arquivo) {
+      try {
+        driveUpload = await googleDriveStorage.uploadFile({
+          buffer: fileBuffer,
+          originalName: payload.arquivo.nome,
+          mimeType: detectedMimeType || "application/pdf",
+          lojaId: vagasList[0]?.loja_id || null,
+          simulateFailure: payload.arquivo.simulateFailure === true
+        });
+      } catch (driveErr) {
+        console.error("[Backend] Falha no armazenamento externo:", driveErr.message);
+        return {
+          statusCode: 502,
+          data: {
+            success: false,
+            mensagem: "Falha tempor\xE1ria ao comunicar com o servidor de armazenamento seguro. Por favor, tente enviar novamente.",
+            detalhes: "O upload para o reposit\xF3rio de arquivos falhou. Nenhum registro foi gravado no banco de dados."
+          }
+        };
+      }
     }
     const { data: rpcData, error: rpcError } = await supabaseAdmin.rpc(
-      "registrar_candidatura_transacional",
+      "registrar_candidatura_transacional_v2",
       {
         p_nome: nome,
         p_email: email,
@@ -1224,37 +1244,46 @@ async function handleCandidatura(payload, clientIp = "127.0.0.1") {
         p_cpf_mascarado: cpfMascarado,
         p_cpf_criptografado: cpfCriptografado,
         p_telefone: telefone,
-        p_cidade: cidade,
-        p_estado: estado,
-        p_escolaridade: escolaridade,
-        p_linkedin_url: linkedinUrl,
+        p_cidade: cidade || null,
+        p_estado: estado || null,
+        p_escolaridade: escolaridade || null,
+        p_linkedin_url: linkedinUrl || null,
         p_aceita_outras_vagas: aceitaOutrasVagas,
         p_consentimento_lgpd: true,
         p_vagas: vagasList,
-        p_resumo: resumo,
-        p_google_drive_file_id: driveUpload.fileId,
-        p_google_drive_folder_id: driveUpload.folderId,
-        p_nome_arquivo: driveUpload.fileName,
-        p_mime_type: driveUpload.mimeType,
-        p_tamanho_bytes: driveUpload.tamanhoBytes,
-        p_md5_checksum: driveUpload.md5Checksum,
+        p_apresentacao_pessoal: apresentacaoPessoal,
+        p_experiencia_profissional: payload.experiencia_profissional || {},
+        p_google_drive_file_id: driveUpload?.fileId || null,
+        p_google_drive_folder_id: driveUpload?.folderId || null,
+        p_nome_arquivo: driveUpload?.fileName || null,
+        p_mime_type: driveUpload?.mimeType || null,
+        p_tamanho_bytes: driveUpload?.tamanhoBytes || null,
+        p_md5_checksum: driveUpload?.md5Checksum || null,
         p_protocolo: protocolo,
-        p_ip_origem: clientIp
+        p_ip_origem: clientIp || "127.0.0.1"
       }
     );
     if (rpcError) {
       console.error("[Backend] Erro na transa\xE7\xE3o do banco:", rpcError.message);
-      try {
-        await googleDriveStorage.deleteFile(driveUpload.fileId);
-      } catch (compErr) {
-        await registrarFalhaCompensacaoPersistente(
-          driveUpload.fileId,
-          driveUpload.fileName,
-          protocolo,
-          compErr?.message || "Erro desconhecido"
-        );
+      if (driveUpload?.fileId) {
+        try {
+          await googleDriveStorage.deleteFile(driveUpload.fileId);
+        } catch (compErr) {
+          await registrarFalhaCompensacaoPersistente(
+            driveUpload.fileId,
+            driveUpload.fileName,
+            protocolo,
+            compErr?.message || "Erro desconhecido"
+          );
+        }
       }
       const msg = rpcError.message || "";
+      if (msg.includes("APRESENTACAO_INSUFICIENTE")) {
+        return { statusCode: 400, data: { success: false, mensagem: "A apresenta\xE7\xE3o pessoal deve conter no m\xEDnimo 80 caracteres." } };
+      }
+      if (msg.includes("APRESENTACAO_LONGA")) {
+        return { statusCode: 400, data: { success: false, mensagem: "A apresenta\xE7\xE3o pessoal n\xE3o pode exceder 2.000 caracteres." } };
+      }
       if (msg.includes("VAGA_INEXISTENTE")) {
         return { statusCode: 404, data: { success: false, mensagem: "Uma das vagas selecionadas n\xE3o foi encontrada." } };
       }
@@ -1277,15 +1306,17 @@ async function handleCandidatura(payload, clientIp = "127.0.0.1") {
       };
     }
     if (rpcData?.status_processamento === "todas_vagas_duplicadas") {
-      try {
-        await googleDriveStorage.deleteFile(driveUpload.fileId);
-      } catch (compErr) {
-        await registrarFalhaCompensacaoPersistente(
-          driveUpload.fileId,
-          driveUpload.fileName,
-          protocolo,
-          compErr?.message || "Erro desconhecido"
-        );
+      if (driveUpload?.fileId) {
+        try {
+          await googleDriveStorage.deleteFile(driveUpload.fileId);
+        } catch (compErr) {
+          await registrarFalhaCompensacaoPersistente(
+            driveUpload.fileId,
+            driveUpload.fileName,
+            protocolo,
+            compErr?.message || "Erro desconhecido"
+          );
+        }
       }
       return {
         statusCode: 409,
@@ -1319,11 +1350,12 @@ async function handleCandidatura(payload, clientIp = "127.0.0.1") {
         status_processamento: "efetivado",
         protocolo: rpcData?.protocolo || protocolo,
         candidato_id: rpcData?.candidato_id,
-        curriculo_id: rpcData?.curriculo_id,
+        curriculo_id: rpcData?.curriculo_id || null,
+        possui_curriculo_anexado: Boolean(rpcData?.curriculo_id || driveUpload?.fileId),
         candidaturas_criadas: rpcData?.candidaturas_criadas || vagasList.length,
         vagas_duplicadas_ignoradas: rpcData?.vagas_duplicadas_ignoradas || [],
         status: "Recebido",
-        mensagem: "Candidatura e curr\xEDculo recebidos e vinculados com sucesso \xE0s vagas selecionadas."
+        mensagem: driveUpload?.fileId ? "Candidatura e curr\xEDculo recebidos e vinculados com sucesso \xE0s vagas selecionadas." : "Candidatura com apresenta\xE7\xE3o e hist\xF3rico recebida com sucesso no Banco de Talentos."
       }
     };
   } catch (err) {

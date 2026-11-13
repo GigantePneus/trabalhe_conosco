@@ -14,6 +14,7 @@ const ResetPassword: React.FC<ResetPasswordProps> = ({ onSuccess }) => {
   const [loading, setLoading] = useState(false);
   const [checkingSession, setCheckingSession] = useState(true);
   const [isRecoveryFlow, setIsRecoveryFlow] = useState(false);
+  const [isInviteFlow, setIsInviteFlow] = useState(false);
   const [userEmail, setUserEmail] = useState('');
   const [statusMsg, setStatusMsg] = useState<{ text: string; type: 'success' | 'error' | '' }>({ text: '', type: '' });
   const [completed, setCompleted] = useState(false);
@@ -26,7 +27,7 @@ const ResetPassword: React.FC<ResetPasswordProps> = ({ onSuccess }) => {
         // 1. Verifica se a flag de recuperação foi sinalizada pelo App.tsx
         const hasSessionFlag = sessionStorage.getItem('gigante_recovery_mode') === 'true';
 
-        // 2. Verifica se a URL contém tokens de recuperação (hash ou search)
+        // 2. Verifica se a URL contém tokens de recuperação ou convite (hash ou search)
         const fullUrl = window.location.href;
         const searchParams = new URLSearchParams(window.location.search);
         const hash = window.location.hash || '';
@@ -42,10 +43,21 @@ const ResetPassword: React.FC<ResetPasswordProps> = ({ onSuccess }) => {
           }
         }
 
+        const isInvite = 
+          searchParams.get('type') === 'invite' ||
+          hashParams.get('type') === 'invite' ||
+          fullUrl.includes('type=invite') ||
+          hash.includes('definir-senha');
+
+        if (isInvite) {
+          setIsInviteFlow(true);
+        }
+
         const isRecoveryExplicit = 
           searchParams.get('type') === 'recovery' ||
           hashParams.get('type') === 'recovery' ||
           fullUrl.includes('type=recovery') ||
+          isInvite ||
           hasSessionFlag;
 
         // Se houver access_token e refresh_token no hash, garante que o Supabase registre a sessão
@@ -222,9 +234,11 @@ const ResetPassword: React.FC<ResetPasswordProps> = ({ onSuccess }) => {
             <div className="bg-red-600 w-20 h-20 rounded-2xl flex items-center justify-center mx-auto mb-6 shadow-xl rotate-3">
               <ShieldCheck className="h-10 w-10 text-white" />
             </div>
-            <h1 className="text-3xl font-extrabold text-gray-900 dark:text-white uppercase tracking-tighter">Nova Senha</h1>
+            <h1 className="text-3xl font-extrabold text-gray-900 dark:text-white uppercase tracking-tighter">
+              {isInviteFlow ? 'Criar Senha de Acesso' : 'Nova Senha'}
+            </h1>
             <p className="text-gray-500 dark:text-gray-400 font-bold text-xs mt-2 uppercase tracking-widest">
-              Defina a nova credencial de acesso
+              {isInviteFlow ? 'Seja bem-vindo(a)! Defina sua credencial de acesso' : 'Defina a nova credencial de acesso'}
             </p>
             {userEmail && (
               <div className="mt-3 inline-block bg-gray-100 dark:bg-gray-800 px-3 py-1 rounded-full text-xs font-mono font-bold text-gray-700 dark:text-gray-300">
@@ -239,14 +253,24 @@ const ResetPassword: React.FC<ResetPasswordProps> = ({ onSuccess }) => {
                 <CheckCircle2 className="h-8 w-8" />
               </div>
               <div>
-                <h3 className="text-lg font-black uppercase text-gray-900 dark:text-white">Senha Redefinida!</h3>
+                <h3 className="text-lg font-black uppercase text-gray-900 dark:text-white">
+                  {isInviteFlow ? 'Conta Configurada!' : 'Senha Redefinida!'}
+                </h3>
                 <p className="text-xs text-gray-500 dark:text-gray-400 mt-2 font-medium">
                   {statusMsg.text}
                 </p>
               </div>
               <a
                 href="#/admin"
-                className="w-full inline-flex items-center justify-center gap-2 bg-red-600 hover:bg-red-700 text-white font-black uppercase py-4 rounded-xl text-sm transition-all shadow-lg"
+                onClick={(e) => {
+                  e.preventDefault();
+                  onSuccess?.();
+                  if (typeof window !== 'undefined') {
+                    window.history.replaceState(null, '', '/#/admin');
+                    window.location.hash = '#/admin';
+                  }
+                }}
+                className="w-full inline-flex items-center justify-center gap-2 bg-red-600 hover:bg-red-700 text-white font-black uppercase py-4 rounded-xl text-sm transition-all shadow-lg cursor-pointer"
               >
                 Acessar o Painel RH <ArrowRight className="h-4 w-4" />
               </a>

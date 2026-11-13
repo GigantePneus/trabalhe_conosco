@@ -1,11 +1,20 @@
 import path from 'path';
 import fs from 'fs';
+import { pathToFileURL } from 'url';
 import { defineConfig, loadEnv } from 'vite';
 import react from '@vitejs/plugin-react';
 import type { Plugin } from 'vite';
 
+// Helper robusto para carregar módulos compilados da API local via ESM independente do .vite-temp
+const projectRoot = process.cwd();
+function getApiModuleUrl(apiRelativePath: string): string {
+  const fullPath = path.resolve(projectRoot, apiRelativePath);
+  const mtime = fs.existsSync(fullPath) ? fs.statSync(fullPath).mtimeMs : Date.now();
+  return `${pathToFileURL(fullPath).href}?t=${mtime}`;
+}
+
 // Carrega .env.local e injeta no process.env do Node.js (apenas no processo backend)
-const envLocalPath = path.resolve(__dirname, '.env.local');
+const envLocalPath = path.resolve(projectRoot, '.env.local');
 if (fs.existsSync(envLocalPath)) {
   const content = fs.readFileSync(envLocalPath, 'utf-8');
   for (const line of content.split(/\r?\n/)) {
@@ -28,7 +37,7 @@ function candidaturasApiPlugin(): Plugin {
         // Rota de Início OAuth Administrativo
         if (req.url?.startsWith('/api/integracoes/google/autorizar') && req.method === 'GET') {
           try {
-            const { handleGoogleAuthorize } = await import('./api/integracoes/google/autorizar');
+            const { handleGoogleAuthorize } = await import(getApiModuleUrl('api/integracoes/google/autorizar.js'));
             const result = await handleGoogleAuthorize(req.headers as Record<string, string | string[] | undefined>);
 
             if (result.cookieToSet) {
@@ -59,7 +68,7 @@ function candidaturasApiPlugin(): Plugin {
         if (req.url?.startsWith('/api/integracoes/google/callback') && req.method === 'GET') {
           try {
             const urlObj = new URL(req.url, 'http://localhost:3000');
-            const { handleGoogleCallback } = await import('./api/integracoes/google/callback');
+            const { handleGoogleCallback } = await import(getApiModuleUrl('api/integracoes/google/callback.js'));
             const result = await handleGoogleCallback({
               code: urlObj.searchParams.get('code') || undefined,
               state: urlObj.searchParams.get('state') || undefined,
@@ -92,7 +101,7 @@ function candidaturasApiPlugin(): Plugin {
               '127.0.0.1';
             const userAgent = (req.headers['user-agent'] as string) || '';
 
-            const { handleVisualizarCurriculo } = await import('./api/curriculos/visualizar');
+            const { handleVisualizarCurriculo } = await import(getApiModuleUrl('api/curriculos/visualizar.js'));
             const result = await handleVisualizarCurriculo({
               curriculoId,
               fileId,
@@ -121,6 +130,56 @@ function candidaturasApiPlugin(): Plugin {
           return;
         }
 
+        // Rota Administrativa para Gestão de Usuários e Permissões
+        if (req.url?.startsWith('/api/admin/usuarios')) {
+          const authHeader = req.headers['authorization'];
+          const bearerToken = authHeader?.startsWith('Bearer ') ? authHeader.slice(7) : null;
+          const { handleListarUsuarios, handleCriarUsuario, handleAtualizarUsuario } = await import(getApiModuleUrl('api/admin/usuarios.js'));
+
+          if (req.method === 'GET') {
+            try {
+              const result = await handleListarUsuarios(bearerToken);
+              res.statusCode = result.statusCode;
+              res.setHeader('Content-Type', 'application/json');
+              res.setHeader('Cache-Control', 'no-store');
+              res.end(JSON.stringify(result.data));
+            } catch (err: any) {
+              res.statusCode = 500;
+              res.setHeader('Content-Type', 'application/json');
+              res.end(JSON.stringify({ success: false, mensagem: err.message || 'Erro interno' }));
+            }
+            return;
+          }
+
+          let bodyStr = '';
+          req.on('data', (chunk) => {
+            bodyStr += chunk;
+          });
+          req.on('end', async () => {
+            try {
+              const body = JSON.parse(bodyStr || '{}');
+              let result: { statusCode: number; data: any };
+              if (req.method === 'POST') {
+                result = await handleCriarUsuario(body, bearerToken);
+              } else if (req.method === 'PATCH' || req.method === 'PUT') {
+                result = await handleAtualizarUsuario(body, bearerToken);
+              } else {
+                res.statusCode = 405;
+                res.end(JSON.stringify({ success: false, mensagem: 'Método não permitido' }));
+                return;
+              }
+              res.statusCode = result.statusCode;
+              res.setHeader('Content-Type', 'application/json');
+              res.end(JSON.stringify(result.data));
+            } catch (err: any) {
+              res.statusCode = 500;
+              res.setHeader('Content-Type', 'application/json');
+              res.end(JSON.stringify({ success: false, mensagem: err.message || 'Erro interno' }));
+            }
+          });
+          return;
+        }
+
         // Rota de Ingestão de Candidaturas
         if (req.url?.startsWith('/api/candidaturas/enviar') && req.method === 'POST') {
           let bodyStr = '';
@@ -130,7 +189,7 @@ function candidaturasApiPlugin(): Plugin {
           req.on('end', async () => {
             try {
               const body = JSON.parse(bodyStr || '{}');
-              const { handleCandidatura } = await import('./api/candidaturas/enviar');
+              const { handleCandidatura } = await import(getApiModuleUrl('api/candidaturas/enviar.js'));
               const clientIp = (req.headers['x-forwarded-for'] as string)?.split(',')[0].trim() ||
                 req.socket.remoteAddress ||
                 '127.0.0.1';

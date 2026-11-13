@@ -1,5 +1,6 @@
 import { ConfigItem, JobLandingContent } from './types';
-import heroVagasDefault from './imagens/banner vagas - gigante pneus.png';
+
+export const DEFAULT_JOB_HERO_IMAGE_PATH = '/imagens/banner%20vagas%20-%20gigante%20pneus.png';
 
 const slugify = (value: string) =>
   value
@@ -15,7 +16,7 @@ export const createDefaultJobLanding = (jobName: string): JobLandingContent => (
   published: false,
   slug: slugify(jobName || 'nova-vaga'),
   title: jobName || 'Nova Vaga',
-  heroImageUrl: heroVagasDefault,
+  heroImageUrl: DEFAULT_JOB_HERO_IMAGE_PATH,
   location: 'A combinar',
   workModel: 'Presencial',
   shortDescription: 'Descreva em 2 ou 3 linhas o impacto desta vaga para o time.',

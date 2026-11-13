@@ -1,5 +1,18 @@
 export type Cargo = string;
 
+export interface ExperienciaProfissional {
+  tipo_experiencia?: 'com_experiencia' | 'primeiro_emprego';
+  primeiro_emprego?: boolean;
+  ultima_empresa?: string;
+  cargo_funcao?: string;
+  area_atuacao?: string;
+  tempo_experiencia?: string;
+  principais_atividades?: string;
+  habilidades?: string[];
+  disponibilidade_inicio?: string;
+  observacoes?: string;
+}
+
 export interface Candidato {
   id: string;
   nome: string;
@@ -14,11 +27,26 @@ export interface Candidato {
   aceita_outras_vagas?: boolean;
   tecnologias?: string;
   resumo?: string;
-  curriculo_url: string; // URL do MinIO / Google Drive
+  apresentacao_pessoal?: string;
+  experiencia_profissional?: ExperienciaProfissional;
+  curriculo_url?: string; // URL do MinIO / Google Drive (opcional na V1)
   curriculo_id?: string;
   curriculo_file_id?: string;
   curriculo_nome_arquivo?: string;
+  possui_curriculo?: boolean;
   candidatura_id?: string;
+  cargo_id?: string | null;
+  status_candidatura?: string;
+  loja_id?: string;
+  loja_nome?: string;
+  loja_cidade?: string;
+  loja_estado?: string;
+  candidato_cidade?: string;
+  candidato_estado?: string;
+  cidade_residencia?: string;
+  unidade_pretendida?: string;
+  protocolo?: string;
+  dados_formulario?: Record<string, any>;
   created_at: string;
 }
 

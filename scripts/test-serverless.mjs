@@ -13,7 +13,8 @@ const expectedEndpoints = [
   'api/curriculos/visualizar.js',
   'api/curriculos/download.js',
   'api/integracoes/google/autorizar.js',
-  'api/integracoes/google/callback.js'
+  'api/integracoes/google/callback.js',
+  'api/admin/usuarios.js'
 ];
 
 console.log('\n1. Verificando presença dos artefatos JavaScript em /api...');
@@ -97,6 +98,7 @@ const r3 = await enviarMod.handleCandidatura({
   telefone: '11999999999',
   consentimento_lgpd: true,
   cpf: '52998224725', // Formato válido para teste de integridade sintática
+  apresentacao_pessoal: 'Sou um profissional dedicado com experiência na área automotiva e busco uma nova oportunidade na Gigante Pneus.',
   arquivo: {
     nome: 'executavel.exe',
     base64: Buffer.from('conteudo teste').toString('base64')
@@ -116,6 +118,7 @@ const r4 = await enviarMod.handleCandidatura({
   telefone: '11999999999',
   consentimento_lgpd: true,
   cpf: '52998224725',
+  apresentacao_pessoal: 'Sou um profissional dedicado com experiência na área automotiva e busco uma nova oportunidade na Gigante Pneus.',
   arquivo: {
     nome: 'curriculo.pdf',
     base64: Buffer.from('conteudo texto falso nao pdf').toString('base64')

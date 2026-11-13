@@ -9,7 +9,8 @@ const entryPoints = [
   'src-api/curriculos/visualizar.ts',
   'src-api/curriculos/download.ts',
   'src-api/integracoes/google/autorizar.ts',
-  'src-api/integracoes/google/callback.ts'
+  'src-api/integracoes/google/callback.ts',
+  'src-api/admin/usuarios.ts'
 ];
 
 // Limpar e preparar o diretório de destino api/

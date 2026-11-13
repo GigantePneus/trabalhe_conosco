@@ -2,24 +2,41 @@ import React, { useState, useEffect, useMemo } from 'react';
 import { supabase } from '../supabase';
 import { Candidato, ConfigItem, JobLandingContent, KPIStats, Pesquisa, Pergunta, TipoPergunta } from '../types';
 import { 
-  BarChart3, Users, ClipboardList, Sparkles, Briefcase, Settings, Building2,
+  BarChart3, Users, ClipboardList, Sparkles, Briefcase, Settings, Building2, Home,
   Eye, Download, MapPin, X, Loader2, Plus, Trash2, TrendingUp, ShieldCheck, Calendar,
   Link2, Copy, CheckCheck, ChevronLeft, ToggleLeft, ToggleRight, FileText, Hash, AlignLeft, ListChecks, Star,
   Share2, ExternalLink, MessageCircle, Brain, Award, Zap, Check, AlertTriangle, ThumbsUp, ThumbsDown, RefreshCw,
   KeyRound, Lock, EyeOff, Shield, Folder,
-  LayoutList, LayoutGrid, Search, PowerOff, RotateCcw, ChevronRight, Info
+  LayoutList, LayoutGrid, Search, PowerOff, RotateCcw, ChevronRight, Info,
+  UserCheck, Clock, FileCheck2, CheckCircle2, AlertCircle, PhoneCall
 } from 'lucide-react';
 import { analyzeSurveyResponses, analyzeTalentCompatibility, listAvailableGeminiModels, AIAnalysisResult, TalentAnalysisResult, DEFAULT_PROMPT_SURVEYS, DEFAULT_PROMPT_TALENTS } from '../aiService';
 import { createDefaultJobLanding, parseJobLandingFromRequisitos, serializeJobLanding, toLines } from '../jobsService';
+import { filterCandidatosAdmin } from '../services/adminFilterService';
 
 const AdminDashboard: React.FC = () => {
-  const [activeTab, setActiveTab] = useState<'overview' | 'talents' | 'surveys' | 'ai' | 'jobs' | 'lojas' | 'settings'>('overview');
+  const [activeTab, setActiveTab] = useState<'overview' | 'talents' | 'surveys' | 'ai' | 'jobs' | 'lojas' | 'acessos' | 'settings'>('overview');
   
   // Perfil e Autenticação do Usuário
   const [currentUser, setCurrentUser] = useState<any>(null);
+  const [currentUserName, setCurrentUserName] = useState<string>('');
   const [userRole, setUserRole] = useState<string>('');
   const [userProfileLoading, setUserProfileLoading] = useState(true);
+  const [userAuthorizedLojas, setUserAuthorizedLojas] = useState<any[]>([]);
   const isGestorMaster = userRole === 'franqueadora_admin';
+  const isFranqueadoOrGerente = userRole === 'franqueado' || userRole === 'gerente';
+
+  // Estado da Gestão de Acessos Multi-Lojas (Prompt 74)
+  const [adminUsersList, setAdminUsersList] = useState<any[]>([]);
+  const [loadingAdminUsers, setLoadingAdminUsers] = useState(false);
+  const [userModalOpen, setUserModalOpen] = useState(false);
+  const [editingUserId, setEditingUserId] = useState<string | null>(null);
+  const [userFormNome, setUserFormNome] = useState('');
+  const [userFormEmail, setUserFormEmail] = useState('');
+  const [userFormRole, setUserFormRole] = useState<'franqueado' | 'gerente'>('franqueado');
+  const [userFormLojas, setUserFormLojas] = useState<string[]>([]);
+  const [savingAdminUser, setSavingAdminUser] = useState(false);
+  const [adminUserFeedback, setAdminUserFeedback] = useState<{ text: string; type: 'success' | 'error' | '' }>({ text: '', type: '' });
 
   // Gestão de Unidades (Lojas)
   const [lojasList, setLojasList] = useState<any[]>([]);
@@ -68,12 +85,49 @@ const AdminDashboard: React.FC = () => {
   
   const [candidatos, setCandidatos] = useState<Candidato[]>([]);
   const [loading, setLoading] = useState(true);
+
+  // Filtros Estruturados do Banco de Talentos (Prompt 65)
+  const [filterLojaId, setFilterLojaId] = useState('');
+  const [filterCargoId, setFilterCargoId] = useState('');
+  const [filterStatus, setFilterStatus] = useState('');
   const [filterCity, setFilterCity] = useState('');
-  const [filterCargo, setFilterCargo] = useState('');
-  
-  // Novos Filtros de Data Globais
+  const [filterEstado, setFilterEstado] = useState('');
   const [startDate, setStartDate] = useState('');
   const [endDate, setEndDate] = useState('');
+  const [searchTerm, setSearchTerm] = useState('');
+
+  // Lista filtrada em memória de forma limpa e reativa
+  const filteredCandidatos = useMemo(() => {
+    return filterCandidatosAdmin(candidatos as any, {
+      lojaId: filterLojaId,
+      cargoId: filterCargoId,
+      cidade: filterCity,
+      estado: filterEstado,
+      status: filterStatus,
+      startDate,
+      endDate,
+      searchTerm
+    }) as Candidato[];
+  }, [candidatos, filterLojaId, filterCargoId, filterCity, filterEstado, filterStatus, startDate, endDate, searchTerm]);
+
+  const clearAllFilters = () => {
+    if (isFranqueadoOrGerente && userAuthorizedLojas.length === 1) {
+      setFilterLojaId(userAuthorizedLojas[0].id);
+    } else {
+      setFilterLojaId('');
+    }
+    setFilterCargoId('');
+    setFilterStatus('');
+    setFilterCity('');
+    setFilterEstado('');
+    setStartDate('');
+    setEndDate('');
+    setSearchTerm('');
+  };
+
+  const hasActiveFilters = Boolean(
+    filterLojaId || filterCargoId || filterStatus || filterCity || filterEstado || startDate || endDate || searchTerm
+  );
 
   const [selectedResume, setSelectedResume] = useState<Candidato | null>(null);
 
@@ -168,23 +222,54 @@ const AdminDashboard: React.FC = () => {
       
       const { data: perfil } = await supabase
         .from('perfis')
-        .select('id, role, ativo')
+        .select('id, nome, role, ativo')
         .eq('id', session.user.id)
         .maybeSingle();
 
-      if (perfil) {
-        setUserRole(perfil.role || '');
+      const role = perfil?.role || '';
+      const resolvedNome = perfil?.nome || session.user.user_metadata?.nome || session.user.email?.split('@')[0] || 'Usuário RH';
+      setCurrentUserName(resolvedNome);
+      setUserRole(role);
+
+      let mappedLojas: any[] = [];
+      // Se for franqueado ou gerente, busca as unidades autorizadas
+      if (role === 'franqueado' || role === 'gerente') {
+        const { data: userLojas } = await supabase
+          .from('usuario_lojas')
+          .select('loja_id, lojas(id, nome, cidade, estado, ativa)')
+          .eq('user_id', session.user.id);
+
+        mappedLojas = (userLojas || [])
+          .map((ul: any) => ul.lojas)
+          .filter((l: any) => l && l.ativa !== false);
+        setUserAuthorizedLojas(mappedLojas);
+
+        // Se tiver apenas 1 unidade vinculada, auto-seleciona no filtro
+        if (mappedLojas.length === 1) {
+          setFilterLojaId(mappedLojas[0].id);
+        }
+      } else {
+        setUserAuthorizedLojas([]);
       }
+
       setUserProfileLoading(false);
+
+      // Carrega os dados operacionais após resolver o perfil e unidades
+      await fetchData(role, mappedLojas);
     };
 
     checkAuthAndProfile();
   }, []);
 
   useEffect(() => {
-    fetchData();
     fetchPesquisas();
-  }, [filterCity, filterCargo, startDate, endDate]);
+  }, []);
+
+  useEffect(() => {
+    if (!isGestorMaster && settingsSubTab === 'usuarios') {
+      setSettingsSubTab('geral');
+    }
+  }, [isGestorMaster, settingsSubTab]);
 
   useEffect(() => {
     localStorage.setItem('gigante_ai_provider', aiProvider);
@@ -259,18 +344,42 @@ const AdminDashboard: React.FC = () => {
     }
   };
 
-  const fetchData = async () => {
+  const fetchData = async (overrideRole?: string, overrideAuthorizedLojas?: any[]) => {
     setLoading(true);
+
+    const effectiveRole = overrideRole !== undefined ? overrideRole : userRole;
+    const effectiveAuthorizedLojas = overrideAuthorizedLojas !== undefined ? overrideAuthorizedLojas : userAuthorizedLojas;
+    const isRestrictedRole = effectiveRole === 'franqueado' || effectiveRole === 'gerente';
+
+    // Se for franqueado/gerente sem nenhuma unidade atribuída, não há dados para exibir
+    if (isRestrictedRole && effectiveAuthorizedLojas.length === 0) {
+      setCandidatos([]);
+      setLojasList([]);
+      setCargos([]);
+      setCidades([]);
+      setStats({ total: 0, porCidade: {}, porCargo: {}, porDia: {} });
+      setTimelineData([]);
+      setHeatmapData(new Array(24).fill(0));
+      setLoading(false);
+      return;
+    }
+
+    const authLojaIds = new Set(effectiveAuthorizedLojas.map((l: any) => l.id));
     
     // Consulta candidatos através do relacionamento com candidaturas (respeitando RLS multi-lojas)
     let qRes = supabase
       .from('candidaturas')
       .select(`
         id,
+        cargo_id,
         vaga_interesse,
         status,
         criado_em,
         loja_id,
+        apresentacao_pessoal,
+        experiencia_profissional,
+        dados_formulario,
+        dados_extras,
         candidatos (
           id,
           nome,
@@ -299,16 +408,17 @@ const AdminDashboard: React.FC = () => {
       `)
       .order('criado_em', { ascending: false });
 
-    if (filterCargo) qRes = qRes.eq('vaga_interesse', filterCargo);
-    if (startDate) qRes = qRes.gte('criado_em', `${startDate}T00:00:00Z`);
-    if (endDate) qRes = qRes.lte('criado_em', `${endDate}T23:59:59Z`);
-
     const { data: candAppRows, error: candAppErr } = await qRes;
 
     let flatCandidatos: Candidato[] = [];
 
     if (!candAppErr && candAppRows) {
-      flatCandidatos = candAppRows.map((row: any) => {
+      // Defesa em profundidade: para franqueado/gerente, garante que só entrem registros de lojas autorizadas
+      const filteredRows = isRestrictedRole
+        ? candAppRows.filter((r: any) => r.loja_id && authLojaIds.has(r.loja_id))
+        : candAppRows;
+
+      flatCandidatos = filteredRows.map((row: any) => {
         const cand = row.candidatos || {};
         const loja = row.lojas || {};
         const rawCurr = row.candidato_curriculos;
@@ -316,83 +426,146 @@ const AdminDashboard: React.FC = () => {
           ? (rawCurr[0] ?? null)
           : (rawCurr ?? null);
 
-        const cidadeFormatada = loja.cidade
-          ? `${loja.cidade}${loja.estado ? ' - ' + loja.estado : ''}`
-          : (cand.cidade || 'Corporativo');
+        const rawCandCidade = (cand.cidade || row.dados_formulario?.cidade || '').trim();
+        const rawCandEstado = (cand.estado || row.dados_formulario?.estado || '').trim().toUpperCase();
+        const cidadeResidencia = rawCandCidade
+          ? `${rawCandCidade}${rawCandEstado ? ' - ' + rawCandEstado : ''}`
+          : 'Não informada';
+
+        const unidadePretendida = (loja.nome || '').trim() || 'Banco de Talentos Corporativo';
 
         const curriculoId = curr?.id || '';
         const curriculoFileId = curr?.google_drive_file_id || '';
         const curriculoNome = curr?.nome_arquivo || '';
+        const hasCurriculo = Boolean(curriculoId || curriculoFileId);
+
+        const apresentacao = row.apresentacao_pessoal || row.dados_formulario?.apresentacao_pessoal || cand.resumo || '';
+        const experiencia = row.experiencia_profissional || row.dados_formulario?.experiencia_profissional || null;
+        const protocolo = row.dados_extras?.protocolo || row.dados_formulario?.protocolo || '';
 
         return {
           id: cand.id || row.id,
           candidatura_id: row.id,
+          cargo_id: row.cargo_id || null,
           nome: cand.nome || 'Candidato',
           email: cand.email || '',
           cpf_mascarado: cand.cpf_mascarado || '',
           telefone: cand.telefone || '',
-          cidade: cidadeFormatada,
+          cidade: cidadeResidencia,
+          cidade_residencia: cidadeResidencia,
+          unidade_pretendida: unidadePretendida,
+          candidato_cidade: rawCandCidade,
+          candidato_estado: rawCandEstado,
           vaga_interesse: row.vaga_interesse || 'Geral',
           escolaridade: cand.escolaridade || '',
           linkedin_url: cand.linkedin_url || '',
           aceita_outras_vagas: cand.aceita_outras_vagas || false,
-          resumo: cand.resumo || '',
+          resumo: apresentacao,
+          apresentacao_pessoal: apresentacao,
+          experiencia_profissional: experiencia,
+          status_candidatura: row.status || 'Recebido',
+          loja_id: row.loja_id || '',
+          loja_nome: loja.nome || '',
+          loja_cidade: loja.cidade || '',
+          loja_estado: loja.estado || '',
+          protocolo: protocolo,
           curriculo_id: curriculoId,
           curriculo_file_id: curriculoFileId,
           curriculo_nome_arquivo: curriculoNome,
+          possui_curriculo: hasCurriculo,
           curriculo_url: curriculoId
             ? `/api/curriculos/visualizar?id=${curriculoId}`
             : (curriculoFileId ? `/api/curriculos/visualizar?fileId=${curriculoFileId}` : ''),
+          dados_formulario: row.dados_formulario || {},
           created_at: row.criado_em || cand.criado_em || new Date().toISOString()
         } as Candidato;
       });
-    } else {
-      // Fallback gracioso caso esteja em ambiente sem autenticação de recrutador
+    } else if (!isRestrictedRole) {
+      // Fallback gracioso apenas caso esteja em ambiente sem autenticação de recrutador
       const { data: rawCand } = await supabase.from('candidatos').select('*').order('criado_em', { ascending: false });
       if (rawCand) {
         flatCandidatos = rawCand.map((c: any) => ({
           ...c,
           created_at: c.criado_em || c.created_at || new Date().toISOString(),
-          curriculo_url: c.curriculo_url || ''
+          curriculo_url: c.curriculo_url || '',
+          possui_curriculo: Boolean(c.curriculo_url)
         }));
       }
-    }
-
-    if (filterCity) {
-      flatCandidatos = flatCandidatos.filter(c => c.cidade.toLowerCase().includes(filterCity.toLowerCase()));
     }
 
     setCandidatos(flatCandidatos);
 
     // Consulta de Lojas e Cargos compatível com o schema v1.3.9
     try {
-      const [lojasRes, cargosRes] = await Promise.all([
-        supabase.from('lojas').select('*').order('nome'),
-        supabase.from('cargos').select('id, titulo, departamento, tipo_vaga, requisitos, ativo, publicada, loja_id, criado_em').order('titulo')
-      ]);
+      if (isRestrictedRole) {
+        // Franqueado / Gerente: recebe exclusivamente suas lojas autorizadas ativas
+        const activeAuthorized = effectiveAuthorizedLojas.filter((l: any) => l.ativa !== false);
+        setLojasList(activeAuthorized);
 
-      if (lojasRes.data) {
-        setLojasList(lojasRes.data);
-        const mappedCidades: ConfigItem[] = lojasRes.data.map((l: any) => ({
-          id: l.id,
-          nome: `${l.cidade} - ${l.estado} (${l.nome})`,
-          created_at: l.criado_em || new Date().toISOString()
+        const candCities = (flatCandidatos || []).map((c: any) => c.candidato_cidade).filter(Boolean);
+        const lojaCities = activeAuthorized.map((l: any) => l.cidade).filter(Boolean);
+        const uniqueCities = Array.from(new Set([...candCities, ...lojaCities])) as string[];
+        const mappedCidades: ConfigItem[] = uniqueCities.sort((a, b) => a.localeCompare(b, 'pt-BR')).map((cityName, idx) => ({
+          id: `city-${idx}`,
+          nome: cityName,
+          created_at: new Date().toISOString()
         }));
         setCidades(mappedCidades);
-      }
 
-      if (cargosRes.data) {
-        const mappedCargos: ConfigItem[] = cargosRes.data.map((c: any) => ({
-          id: c.id,
-          nome: c.titulo,
-          titulo: c.titulo,
-          requisitos: c.requisitos,
-          ativo: c.ativo,
-          publicada: c.publicada,
-          loja_id: c.loja_id,
-          created_at: c.criado_em || new Date().toISOString()
-        }));
-        setCargos(mappedCargos);
+        // Busca cargos e restringe aos cargos das unidades autorizadas
+        const cargosRes = await supabase
+          .from('cargos')
+          .select('id, titulo, departamento, tipo_vaga, requisitos, ativo, publicada, loja_id, criado_em')
+          .order('titulo');
+
+        if (cargosRes.data) {
+          const scopedCargos = cargosRes.data.filter((c: any) => c.loja_id && authLojaIds.has(c.loja_id));
+          const mappedCargos: ConfigItem[] = scopedCargos.map((c: any) => ({
+            id: c.id,
+            nome: c.titulo,
+            titulo: c.titulo,
+            requisitos: c.requisitos,
+            ativo: c.ativo,
+            publicada: c.publicada,
+            loja_id: c.loja_id,
+            created_at: c.criado_em || new Date().toISOString()
+          }));
+          setCargos(mappedCargos);
+        }
+      } else {
+        // Gestor Master: consulta todas as lojas da rede e cargos
+        const [lojasRes, cargosRes] = await Promise.all([
+          supabase.from('lojas').select('*').order('nome'),
+          supabase.from('cargos').select('id, titulo, departamento, tipo_vaga, requisitos, ativo, publicada, loja_id, criado_em').order('titulo')
+        ]);
+
+        if (lojasRes.data) {
+          const activeLojas = lojasRes.data.filter((l: any) => l.ativa !== false);
+          setLojasList(activeLojas);
+          const candCities = (flatCandidatos || []).map((c: any) => c.candidato_cidade).filter(Boolean);
+          const lojaCities = activeLojas.map((l: any) => l.cidade).filter(Boolean);
+          const uniqueCities = Array.from(new Set([...candCities, ...lojaCities])) as string[];
+          const mappedCidades: ConfigItem[] = uniqueCities.sort((a, b) => a.localeCompare(b, 'pt-BR')).map((cityName, idx) => ({
+            id: `city-${idx}`,
+            nome: cityName,
+            created_at: new Date().toISOString()
+          }));
+          setCidades(mappedCidades);
+        }
+
+        if (cargosRes.data) {
+          const mappedCargos: ConfigItem[] = cargosRes.data.map((c: any) => ({
+            id: c.id,
+            nome: c.titulo,
+            titulo: c.titulo,
+            requisitos: c.requisitos,
+            ativo: c.ativo,
+            publicada: c.publicada,
+            loja_id: c.loja_id,
+            created_at: c.criado_em || new Date().toISOString()
+          }));
+          setCargos(mappedCargos);
+        }
       }
     } catch (e) {
       console.warn('Erro ao carregar lojas ou cargos no AdminDashboard:', e);
@@ -650,6 +823,10 @@ const AdminDashboard: React.FC = () => {
 
   // === GESTÃO DE VAGAS ===
   const openJobEditor = (cargo: any) => {
+    if (userRole === 'gerente') {
+      alert('Usuários com perfil Gerente possuem acesso apenas de leitura às vagas.');
+      return;
+    }
     setCreatingJob(false);
     setNewJobName(cargo.nome || cargo.titulo);
     setEditingCargoId(cargo.id);
@@ -661,12 +838,20 @@ const AdminDashboard: React.FC = () => {
   };
 
   const openCreateJobModal = () => {
+    if (userRole === 'gerente') {
+      alert('Usuários com perfil Gerente não possuem permissão para criar novas vagas.');
+      return;
+    }
     const baseName = 'Consultor de Vendas Técnicas';
     const template = createDefaultJobLanding(baseName);
     setCreatingJob(true);
     setEditingCargoId('');
     setNewJobName(baseName);
-    setSelectedJobLojaId('');
+    // Para franqueado, já pré-seleciona sua primeira loja autorizada
+    const defaultLoja = (userRole === 'franqueado' && userAuthorizedLojas.length > 0)
+      ? userAuthorizedLojas[0].id
+      : '';
+    setSelectedJobLojaId(defaultLoja);
     setJobLanding({
       ...template,
       title: 'Consultor de Vendas Técnicas - Centro Automotivo',
@@ -684,6 +869,23 @@ const AdminDashboard: React.FC = () => {
   };
 
   const handleSaveJobLanding = async () => {
+    if (userRole === 'gerente') {
+      alert('Usuários com perfil Gerente não possuem permissão para salvar ou alterar vagas.');
+      return;
+    }
+
+    if (userRole === 'franqueado') {
+      if (!selectedJobLojaId) {
+        alert('Selecione obrigatoriamente uma das suas unidades autorizadas para vincular a vaga.');
+        return;
+      }
+      const allowedIds = new Set(userAuthorizedLojas.map(l => l.id));
+      if (!allowedIds.has(selectedJobLojaId)) {
+        alert('Você só pode criar ou vincular vagas às unidades atribuídas ao seu usuário.');
+        return;
+      }
+    }
+
     if (creatingJob && !newJobName.trim()) {
       alert('Informe o nome base da vaga.');
       return;
@@ -737,6 +939,19 @@ const AdminDashboard: React.FC = () => {
   };
 
   const handleTogglePublish = async (cargo: any) => {
+    if (userRole === 'gerente') {
+      alert('Usuários com perfil Gerente não possuem permissão para publicar ou despublicar vagas.');
+      return;
+    }
+
+    if (userRole === 'franqueado') {
+      const allowedIds = new Set(userAuthorizedLojas.map(l => l.id));
+      if (!cargo.loja_id || !allowedIds.has(cargo.loja_id)) {
+        alert('Você só pode alterar vagas vinculadas às suas unidades autorizadas.');
+        return;
+      }
+    }
+
     const newPublished = !cargo.publicada;
     let serialized = cargo.requisitos;
     try {
@@ -761,6 +976,20 @@ const AdminDashboard: React.FC = () => {
   };
 
   const handleDeleteJob = async (cargoId: string) => {
+    if (userRole === 'gerente') {
+      alert('Usuários com perfil Gerente não possuem permissão para excluir vagas.');
+      return;
+    }
+
+    if (userRole === 'franqueado') {
+      const targetCargo = cargos.find(c => c.id === cargoId);
+      const allowedIds = new Set(userAuthorizedLojas.map(l => l.id));
+      if (!targetCargo?.loja_id || !allowedIds.has(targetCargo.loja_id)) {
+        alert('Você só pode excluir vagas vinculadas às suas unidades autorizadas.');
+        return;
+      }
+    }
+
     setDeletingJobId(cargoId);
     const { error } = await supabase.from('cargos').delete().eq('id', cargoId);
     setDeletingJobId(null);
@@ -1176,10 +1405,32 @@ const AdminDashboard: React.FC = () => {
           <h2 className="text-xl font-black text-gray-900 dark:text-white uppercase tracking-tighter leading-none">
             RH <span className="text-red-600">WORKSPACE</span>
           </h2>
-          <div className="mt-3">
-            <span className={`inline-flex items-center text-[10px] font-black uppercase tracking-wider px-2.5 py-1 rounded-lg ${isGestorMaster ? 'bg-red-600 text-white' : 'bg-gray-100 dark:bg-gray-800 text-gray-700 dark:text-gray-300'}`}>
-              {isGestorMaster ? 'Gestor Master' : (userRole === 'rh_corporativo' ? 'RH Corporativo' : (userRole || 'Usuário RH'))}
-            </span>
+
+          {/* Cartão de Identificação do Usuário */}
+          <div className="mt-4 p-3 bg-gray-50 dark:bg-gray-800/60 rounded-2xl border border-gray-100 dark:border-gray-800">
+            <div className="flex items-center gap-2.5">
+              <div className="w-8 h-8 rounded-xl bg-red-600 text-white flex items-center justify-center font-black text-xs uppercase shadow-sm shrink-0">
+                {currentUserName ? currentUserName.split(' ').filter(Boolean).map(n => n[0]).slice(0, 2).join('').toUpperCase() : 'RH'}
+              </div>
+              <div className="overflow-hidden min-w-0">
+                <p className="text-xs font-black text-gray-900 dark:text-white truncate" title={currentUserName || currentUser?.email}>
+                  {currentUserName || currentUser?.email || 'Usuário RH'}
+                </p>
+                <p className="text-[10px] text-gray-400 font-medium truncate" title={currentUser?.email}>
+                  {currentUser?.email}
+                </p>
+              </div>
+            </div>
+            <div className="mt-2.5 flex flex-wrap items-center gap-1.5 pt-2 border-t border-gray-200/50 dark:border-gray-700/50">
+              <span className={`inline-flex items-center text-[9px] font-black uppercase tracking-wider px-2 py-0.5 rounded-md ${isGestorMaster ? 'bg-red-600 text-white' : 'bg-gray-200 dark:bg-gray-700 text-gray-700 dark:text-gray-300'}`}>
+                {isGestorMaster ? 'Gestor Master' : (userRole === 'rh_corporativo' ? 'RH Corporativo' : (userRole === 'franqueado' ? 'Franqueado' : (userRole === 'gerente' ? 'Gerente' : (userRole || 'Usuário RH'))))}
+              </span>
+              {isFranqueadoOrGerente && (
+                <span className="inline-flex items-center text-[9px] font-bold text-amber-700 dark:text-amber-300 bg-amber-100 dark:bg-amber-950/60 px-2 py-0.5 rounded-md border border-amber-200 dark:border-amber-900/40">
+                  {userAuthorizedLojas.length} {userAuthorizedLojas.length === 1 ? 'unidade autorizada' : 'unidades autorizadas'}
+                </span>
+              )}
+            </div>
           </div>
         </div>
         
@@ -1189,7 +1440,12 @@ const AdminDashboard: React.FC = () => {
           <SidebarItem id="surveys" label="Pesquisas Internas" icon={<ClipboardList className="h-5 w-5" />} />
           <SidebarItem id="ai" label="Análise de IA" icon={<Sparkles className="h-5 w-5" />} />
           <SidebarItem id="jobs" label="Mural de Vagas" icon={<Briefcase className="h-5 w-5" />} />
-          <SidebarItem id="lojas" label="Rede de Unidades" icon={<Building2 className="h-5 w-5" />} />
+          {isGestorMaster && (
+            <>
+              <SidebarItem id="lojas" label="Rede de Unidades" icon={<Building2 className="h-5 w-5" />} />
+              <SidebarItem id="acessos" label="Gestão de Acessos" icon={<Shield className="h-5 w-5" />} />
+            </>
+          )}
         </nav>
 
         <div className="border-t border-gray-100 dark:border-gray-800 py-4">
@@ -1200,6 +1456,26 @@ const AdminDashboard: React.FC = () => {
       {/* Main Content Area */}
       <main className="flex-1 p-6 md:p-10 overflow-y-auto">
         <div className="max-w-7xl mx-auto">
+          {/* Banner de Unidade Vinculada para Franqueado / Gerente */}
+          {isFranqueadoOrGerente && (
+            <div className="mb-6 p-5 rounded-2xl bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-800 flex items-center justify-between gap-4">
+              <div className="flex items-center gap-3">
+                <div className="p-2.5 bg-amber-500 text-white rounded-xl">
+                  <Building2 className="h-5 w-5" />
+                </div>
+                <div>
+                  <h4 className="text-xs font-black uppercase tracking-wider text-amber-900 dark:text-amber-200">
+                    Acesso Restrito às Unidades Vinculadas ({userAuthorizedLojas.length})
+                  </h4>
+                  <p className="text-xs text-amber-700 dark:text-amber-400 font-semibold mt-0.5">
+                    {userAuthorizedLojas.length > 0 
+                      ? userAuthorizedLojas.map(l => l.nome).join(' • ')
+                      : 'Nenhuma unidade vinculada ao seu usuário. Entre em contato com a administração da Gigante Pneus.'}
+                  </p>
+                </div>
+              </div>
+            </div>
+          )}
           
           {/* Aba: VISÃO GERAL */}
           {activeTab === 'overview' && (
@@ -1262,48 +1538,148 @@ const AdminDashboard: React.FC = () => {
           {activeTab === 'talents' && (
             <div className="space-y-6 animate-in slide-in-from-bottom-4 duration-500">
               
-              {/* Barra de Filtros */}
-              <div className="flex flex-col md:flex-row items-center justify-between gap-4 bg-white dark:bg-gray-900 p-6 rounded-[2rem] border border-gray-100 dark:border-gray-800 shadow-lg">
-                <div className="flex items-center gap-4 flex-wrap">
-                  <div className="flex items-center gap-3 mr-4">
-                     <Calendar className="h-6 w-6 text-red-600" />
-                     <h3 className="font-black text-gray-900 dark:text-white uppercase tracking-tight">Filtros</h3>
+              {/* Barra de Filtros Estruturada do Banco de Talentos (Prompt 65) */}
+              <div className="bg-white dark:bg-gray-900 p-6 rounded-[2rem] border border-gray-100 dark:border-gray-800 shadow-lg space-y-4">
+                <div className="flex flex-col md:flex-row items-center justify-between gap-4">
+                  {/* Busca textual por nome / CPF / e-mail / telefone */}
+                  <div className="relative w-full md:w-80">
+                    <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
+                    <input
+                      type="text"
+                      placeholder="Buscar por nome, CPF ou e-mail..."
+                      value={searchTerm}
+                      onChange={e => setSearchTerm(e.target.value)}
+                      className="w-full pl-10 pr-4 py-2 bg-gray-50 dark:bg-gray-800 border-none rounded-xl text-xs font-bold text-gray-800 dark:text-gray-200 outline-none focus:ring-2 focus:ring-red-600 placeholder:text-gray-400"
+                    />
+                    {searchTerm && (
+                      <button
+                        onClick={() => setSearchTerm('')}
+                        className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600"
+                        title="Limpar busca"
+                      >
+                        <X className="h-3.5 w-3.5" />
+                      </button>
+                    )}
                   </div>
-                  <select 
-                    className="px-4 py-2 bg-gray-50 dark:bg-gray-800 border-none rounded-xl text-xs font-black uppercase outline-none"
-                    value={filterCity} onChange={e => setFilterCity(e.target.value)}
+
+                  {/* Contador de resultados e Botão Limpar */}
+                  <div className="flex items-center gap-3 w-full md:w-auto justify-between md:justify-end">
+                    <span className="text-xs font-black uppercase text-gray-500 dark:text-gray-400">
+                      {filteredCandidatos.length} {filteredCandidatos.length === 1 ? 'Candidatura' : 'Candidaturas'}
+                    </span>
+                    {hasActiveFilters && (
+                      <button
+                        onClick={clearAllFilters}
+                        className="text-[10px] bg-red-100 dark:bg-red-950/60 text-red-600 dark:text-red-400 px-3 py-1.5 rounded-xl uppercase font-black hover:bg-red-200 dark:hover:bg-red-900/50 transition-colors inline-flex items-center gap-1.5"
+                      >
+                        <X className="h-3 w-3" /> Limpar Filtros
+                      </button>
+                    )}
+                  </div>
+                </div>
+
+                {/* Dropdowns Estruturados */}
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3 pt-3 border-t border-gray-100 dark:border-gray-800">
+                  {/* Filtro 1: Unidade Franqueada (loja_id) */}
+                  <select
+                    className="px-3.5 py-2 bg-gray-50 dark:bg-gray-800 border-none rounded-xl text-xs font-bold text-gray-700 dark:text-gray-300 outline-none focus:ring-2 focus:ring-red-600"
+                    value={filterLojaId}
+                    onChange={e => setFilterLojaId(e.target.value)}
+                    disabled={isFranqueadoOrGerente && userAuthorizedLojas.length <= 1}
                   >
-                    <option value="">Todas as Cidades</option>
-                    {cidades.map(c => <option key={c.id} value={c.nome}>{c.nome}</option>)}
+                    {isFranqueadoOrGerente ? (
+                      userAuthorizedLojas.length === 0 ? (
+                        <option value="">Nenhuma unidade vinculada</option>
+                      ) : userAuthorizedLojas.length === 1 ? (
+                        <option value={userAuthorizedLojas[0].id}>
+                          {userAuthorizedLojas[0].nome} ({userAuthorizedLojas[0].cidade}/{userAuthorizedLojas[0].estado})
+                        </option>
+                      ) : (
+                        <>
+                          <option value="">Todas as Minhas Unidades ({userAuthorizedLojas.length})</option>
+                          {userAuthorizedLojas.map(l => (
+                            <option key={l.id} value={l.id}>
+                              {l.nome} ({l.cidade}/{l.estado})
+                            </option>
+                          ))}
+                        </>
+                      )
+                    ) : (
+                      <>
+                        <option value="">Todas as Unidades da Rede ({lojasList.length})</option>
+                        {lojasList.map(l => (
+                          <option key={l.id} value={l.id}>
+                            {l.nome} ({l.cidade}/{l.estado})
+                          </option>
+                        ))}
+                      </>
+                    )}
                   </select>
-                  <select 
-                    className="px-4 py-2 bg-gray-50 dark:bg-gray-800 border-none rounded-xl text-xs font-black uppercase outline-none"
-                    value={filterCargo} onChange={e => setFilterCargo(e.target.value)}
+
+                  {/* Filtro 2: Cargo / Vaga (cargo_id estruturado) */}
+                  <select
+                    className="px-3.5 py-2 bg-gray-50 dark:bg-gray-800 border-none rounded-xl text-xs font-bold text-gray-700 dark:text-gray-300 outline-none focus:ring-2 focus:ring-red-600"
+                    value={filterCargoId}
+                    onChange={e => setFilterCargoId(e.target.value)}
                   >
                     <option value="">Todas as Vagas</option>
-                    {cargos.map(c => <option key={c.id} value={c.nome}>{c.nome}</option>)}
+                    <option value="espontanea">★ Candidatura Espontânea</option>
+                    {cargos.map(c => (
+                      <option key={c.id} value={c.id}>
+                        {c.titulo || c.nome}
+                      </option>
+                    ))}
                   </select>
-                </div>
-                
-                <div className="flex items-center gap-3">
-                  <input 
-                    type="date" 
-                    value={startDate}
-                    onChange={(e) => setStartDate(e.target.value)}
-                    className="px-4 py-2 bg-gray-50 dark:bg-gray-800 rounded-xl border-none text-sm font-bold text-gray-600 dark:text-gray-300 outline-none focus:ring-2 focus:ring-red-600"
-                  />
-                  <span className="text-gray-400 font-bold uppercase text-[10px]">até</span>
-                  <input 
-                    type="date" 
-                    value={endDate}
-                    onChange={(e) => setEndDate(e.target.value)}
-                    className="px-4 py-2 bg-gray-50 dark:bg-gray-800 rounded-xl border-none text-sm font-bold text-gray-600 dark:text-gray-300 outline-none focus:ring-2 focus:ring-red-600"
-                  />
-                  {(startDate || endDate || filterCity || filterCargo) && (
-                    <button onClick={() => {setStartDate(''); setEndDate(''); setFilterCity(''); setFilterCargo('');}} className="ml-2 text-[10px] bg-red-100 text-red-600 px-3 py-2 rounded-xl uppercase font-black hover:bg-red-200">
-                      Limpar
-                    </button>
-                  )}
+
+                  {/* Filtro 3: Status da Candidatura */}
+                  <select
+                    className="px-3.5 py-2 bg-gray-50 dark:bg-gray-800 border-none rounded-xl text-xs font-bold text-gray-700 dark:text-gray-300 outline-none focus:ring-2 focus:ring-red-600"
+                    value={filterStatus}
+                    onChange={e => setFilterStatus(e.target.value)}
+                  >
+                    <option value="">Todos os Status</option>
+                    <option value="Recebido">Recebido</option>
+                    <option value="Em Triagem">Em Triagem</option>
+                    <option value="Entrevista Agendada">Entrevista Agendada</option>
+                    <option value="Aprovado">Aprovado</option>
+                    <option value="Reprovado">Reprovado</option>
+                    <option value="Desistente">Desistente</option>
+                    <option value="Banco de Talentos">Banco de Talentos</option>
+                  </select>
+
+                  {/* Filtro 4: Cidade de Residência */}
+                  <select
+                    className="px-3.5 py-2 bg-gray-50 dark:bg-gray-800 border-none rounded-xl text-xs font-bold text-gray-700 dark:text-gray-300 outline-none focus:ring-2 focus:ring-red-600"
+                    value={filterCity}
+                    onChange={e => setFilterCity(e.target.value)}
+                    title="Filtrar por Cidade de Residência do Candidato"
+                  >
+                    <option value="">Todas as Cidades de Residência</option>
+                    {cidades.map(c => (
+                      <option key={c.id} value={c.nome}>
+                        {c.nome}
+                      </option>
+                    ))}
+                  </select>
+
+                  {/* Filtro 5: Período de Submissão */}
+                  <div className="flex items-center gap-1.5">
+                    <input
+                      type="date"
+                      value={startDate}
+                      onChange={e => setStartDate(e.target.value)}
+                      title="Data Inicial"
+                      className="w-1/2 px-2.5 py-2 bg-gray-50 dark:bg-gray-800 rounded-xl border-none text-[11px] font-bold text-gray-600 dark:text-gray-300 outline-none focus:ring-2 focus:ring-red-600"
+                    />
+                    <span className="text-gray-400 font-bold uppercase text-[9px]">até</span>
+                    <input
+                      type="date"
+                      value={endDate}
+                      onChange={e => setEndDate(e.target.value)}
+                      title="Data Final"
+                      className="w-1/2 px-2.5 py-2 bg-gray-50 dark:bg-gray-800 rounded-xl border-none text-[11px] font-bold text-gray-600 dark:text-gray-300 outline-none focus:ring-2 focus:ring-red-600"
+                    />
+                  </div>
                 </div>
               </div>
 
@@ -1311,30 +1687,89 @@ const AdminDashboard: React.FC = () => {
                 <table className="w-full text-left">
                   <thead className="bg-gray-50/50 dark:bg-gray-800/50 border-b dark:border-gray-700">
                     <tr>
-                      <th className="px-8 py-5 text-[10px] font-black text-gray-400 dark:text-gray-500 uppercase tracking-widest">Candidato</th>
-                      <th className="px-8 py-5 text-[10px] font-black text-gray-400 dark:text-gray-500 uppercase tracking-widest">Contato</th>
-                      <th className="px-8 py-5 text-[10px] font-black text-gray-400 dark:text-gray-500 uppercase tracking-widest">Cidade</th>
-                      <th className="px-8 py-5 text-[10px] font-black text-gray-400 dark:text-gray-500 uppercase tracking-widest">Cadastro</th>
-                      <th className="px-8 py-5 text-[10px] font-black text-gray-400 dark:text-gray-500 uppercase tracking-widest text-right">Ação</th>
+                      <th className="px-6 py-5 text-[10px] font-black text-gray-400 dark:text-gray-500 uppercase tracking-widest">Candidato</th>
+                      <th className="px-6 py-5 text-[10px] font-black text-gray-400 dark:text-gray-500 uppercase tracking-widest">Contato</th>
+                      <th className="px-6 py-5 text-[10px] font-black text-gray-400 dark:text-gray-500 uppercase tracking-widest">Residência</th>
+                      <th className="px-6 py-5 text-[10px] font-black text-gray-400 dark:text-gray-500 uppercase tracking-widest">Unidade Pretendida</th>
+                      <th className="px-6 py-5 text-[10px] font-black text-gray-400 dark:text-gray-500 uppercase tracking-widest">Tipo de Cadastro</th>
+                      <th className="px-6 py-5 text-[10px] font-black text-gray-400 dark:text-gray-500 uppercase tracking-widest">Cadastro</th>
+                      <th className="px-6 py-5 text-[10px] font-black text-gray-400 dark:text-gray-500 uppercase tracking-widest text-right">Ação</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-gray-50 dark:divide-gray-800">
                     {loading ? (
-                      <tr><td colSpan={5} className="py-20 text-center"><Loader2 className="h-8 w-8 animate-spin text-red-600 mx-auto" /></td></tr>
-                    ) : candidatos.map(item => (
+                      <tr><td colSpan={7} className="py-20 text-center"><Loader2 className="h-8 w-8 animate-spin text-red-600 mx-auto" /></td></tr>
+                    ) : filteredCandidatos.length === 0 ? (
+                      <tr>
+                        <td colSpan={7} className="py-16 text-center">
+                          <div className="max-w-md mx-auto space-y-3">
+                            <div className="w-12 h-12 rounded-2xl bg-gray-100 dark:bg-gray-800 text-gray-400 flex items-center justify-center mx-auto">
+                              <Search className="h-6 w-6" />
+                            </div>
+                            <h4 className="text-base font-bold text-gray-800 dark:text-gray-200">
+                              Nenhuma candidatura encontrada
+                            </h4>
+                            <p className="text-xs text-gray-500 dark:text-gray-400">
+                              Não encontramos registros para os critérios selecionados. Altere os filtros ou clique em limpar.
+                            </p>
+                            {hasActiveFilters && (
+                              <button
+                                onClick={clearAllFilters}
+                                className="inline-flex items-center gap-2 px-4 py-2 bg-red-50 dark:bg-red-950/40 text-red-600 dark:text-red-400 rounded-xl text-xs font-black uppercase tracking-wider hover:bg-red-100 dark:hover:bg-red-900/60 transition-colors"
+                              >
+                                Limpar Todos os Filtros
+                              </button>
+                            )}
+                          </div>
+                        </td>
+                      </tr>
+                    ) : filteredCandidatos.map(item => (
                       <tr key={item.id} className="hover:bg-red-50/50 dark:hover:bg-red-900/10 transition-colors group">
-                        <td className="px-8 py-5">
+                        <td className="px-6 py-5">
                           <div className="font-black text-gray-900 dark:text-white uppercase">{item.nome}</div>
                           <div className="text-[10px] text-gray-400 font-bold uppercase">{item.vaga_interesse}</div>
                         </td>
-                        <td className="px-8 py-5 text-xs font-medium text-gray-600 dark:text-gray-300">
+                        <td className="px-6 py-5 text-xs font-medium text-gray-600 dark:text-gray-300">
                           <div>{item.email}</div>
                           <div className="text-[10px] text-gray-400">{item.telefone}</div>
                         </td>
-                        <td className="px-8 py-5 text-xs font-bold text-gray-500 dark:text-gray-400 uppercase">{item.cidade}</td>
-                        <td className="px-8 py-5 text-[11px] font-bold text-gray-400 uppercase">{new Date(item.created_at).toLocaleDateString('pt-BR')}</td>
-                        <td className="px-8 py-5 text-right">
-                          <button onClick={() => setSelectedResume(item)} className="bg-red-600 text-white p-2.5 rounded-xl hover:bg-red-700 transition-all shadow-md active:scale-90">
+                        <td className="px-6 py-5 text-xs font-bold text-gray-700 dark:text-gray-300 uppercase">
+                          <div className="flex items-center gap-1.5">
+                            <MapPin className="h-3.5 w-3.5 text-gray-400 shrink-0" />
+                            <span>{item.cidade_residencia || item.cidade || 'Não informada'}</span>
+                          </div>
+                        </td>
+                        <td className="px-6 py-5 text-xs font-bold text-gray-900 dark:text-white">
+                          <div className="flex items-center gap-1.5">
+                            <Building2 className="h-3.5 w-3.5 text-red-600 shrink-0" />
+                            <span className="truncate max-w-[200px]" title={item.unidade_pretendida || 'Banco de Talentos Corporativo'}>
+                              {item.unidade_pretendida || 'Banco de Talentos Corporativo'}
+                            </span>
+                          </div>
+                          {item.loja_cidade && (
+                            <div className="text-[10px] text-gray-400 font-semibold pl-5">
+                              {item.loja_cidade}{item.loja_estado ? ` - ${item.loja_estado}` : ''}
+                            </div>
+                          )}
+                        </td>
+                        <td className="px-6 py-5">
+                          {item.possui_curriculo ? (
+                            <span className="inline-flex items-center gap-1.5 bg-green-50 dark:bg-green-950/40 text-green-700 dark:text-green-300 px-3 py-1 rounded-full text-[10px] font-black uppercase tracking-wider border border-green-200 dark:border-green-900/50">
+                              <FileCheck2 className="h-3 w-3" /> Currículo Anexo
+                            </span>
+                          ) : (
+                            <span className="inline-flex items-center gap-1.5 bg-blue-50 dark:bg-blue-950/40 text-blue-700 dark:text-blue-300 px-3 py-1 rounded-full text-[10px] font-black uppercase tracking-wider border border-blue-200 dark:border-blue-900/50">
+                              <UserCheck className="h-3 w-3" /> Ficha Profissional
+                            </span>
+                          )}
+                        </td>
+                        <td className="px-6 py-5 text-[11px] font-bold text-gray-400 uppercase">{new Date(item.created_at).toLocaleDateString('pt-BR')}</td>
+                        <td className="px-6 py-5 text-right">
+                          <button 
+                            onClick={() => setSelectedResume(item)} 
+                            className="bg-red-600 text-white p-2.5 rounded-xl hover:bg-red-700 transition-all shadow-md active:scale-90"
+                            title="Ver Dossiê Profissional Completo"
+                          >
                             <Eye className="h-4 w-4" />
                           </button>
                         </td>
@@ -2152,9 +2587,11 @@ const AdminDashboard: React.FC = () => {
                   <p className="text-gray-600 dark:text-gray-300 text-sm font-medium mt-1">Cada vaga vira uma LP padrao no estilo Gigante, com "saiba mais" e "candidate-se".</p>
                 </div>
                 <div className="flex flex-wrap gap-3">
-                  <button onClick={openCreateJobModal} className="inline-flex items-center gap-2 bg-red-600 hover:bg-red-700 text-white px-4 py-2 rounded-xl text-xs font-black uppercase">
-                    <Plus className="h-4 w-4" /> Criar nova vaga
-                  </button>
+                  {(isGestorMaster || userRole === 'franqueado') && (
+                    <button onClick={openCreateJobModal} className="inline-flex items-center gap-2 bg-red-600 hover:bg-red-700 text-white px-4 py-2 rounded-xl text-xs font-black uppercase">
+                      <Plus className="h-4 w-4" /> Criar nova vaga
+                    </button>
+                  )}
                   <a href="#/" target="_blank" rel="noreferrer" className="inline-flex items-center gap-2 bg-red-50 dark:bg-red-900/20 text-red-700 dark:text-red-300 px-4 py-2 rounded-xl text-xs font-black uppercase">
                     <ExternalLink className="h-4 w-4" /> Ver portal publico
                   </a>
@@ -2185,48 +2622,54 @@ const AdminDashboard: React.FC = () => {
                       </div>
                       <p className="text-sm text-gray-600 dark:text-gray-300 line-clamp-2">{landing.shortDescription}</p>
                       <div className="flex flex-wrap items-center gap-2 pt-2 border-t border-gray-100 dark:border-gray-800">
-                        <button onClick={() => openJobEditor(cargo)} className="bg-red-600 hover:bg-red-700 text-white px-3.5 py-2 rounded-xl text-xs font-black uppercase transition-all">
-                          Editar Vaga
-                        </button>
-                        <button
-                          onClick={() => handleTogglePublish(cargo)}
-                          className={`px-3.5 py-2 rounded-xl text-xs font-black uppercase transition-all border ${isPublished ? 'border-amber-300 text-amber-700 hover:bg-amber-50 dark:hover:bg-amber-950/30' : 'border-green-300 text-green-700 hover:bg-green-50 dark:hover:bg-green-950/30'}`}
-                        >
-                          {isPublished ? 'Mudar p/ Rascunho' : 'Publicar Vaga'}
-                        </button>
+                        {(isGestorMaster || userRole === 'franqueado') && (
+                          <>
+                            <button onClick={() => openJobEditor(cargo)} className="bg-red-600 hover:bg-red-700 text-white px-3.5 py-2 rounded-xl text-xs font-black uppercase transition-all">
+                              Editar Vaga
+                            </button>
+                            <button
+                              onClick={() => handleTogglePublish(cargo)}
+                              className={`px-3.5 py-2 rounded-xl text-xs font-black uppercase transition-all border ${isPublished ? 'border-amber-300 text-amber-700 hover:bg-amber-50 dark:hover:bg-amber-950/30' : 'border-green-300 text-green-700 hover:bg-green-50 dark:hover:bg-green-950/30'}`}
+                            >
+                              {isPublished ? 'Mudar p/ Rascunho' : 'Publicar Vaga'}
+                            </button>
+                          </>
+                        )}
                         {isPublished && (
                           <a href={`#/vagas/${cargo.id}`} target="_blank" rel="noreferrer" className="bg-gray-100 dark:bg-gray-800 text-gray-700 dark:text-gray-200 px-3.5 py-2 rounded-xl text-xs font-black uppercase flex items-center gap-1">
                             <ExternalLink className="h-3.5 w-3.5" /> Ver LP
                           </a>
                         )}
-                        <div className="ml-auto">
-                          {confirmDeleteJobId === cargo.id ? (
-                            <div className="flex items-center gap-2 animate-in fade-in duration-200">
-                              <span className="text-[10px] font-black uppercase text-red-600 dark:text-red-400">Excluir?</span>
+                        {(isGestorMaster || userRole === 'franqueado') && (
+                          <div className="ml-auto">
+                            {confirmDeleteJobId === cargo.id ? (
+                              <div className="flex items-center gap-2 animate-in fade-in duration-200">
+                                <span className="text-[10px] font-black uppercase text-red-600 dark:text-red-400">Excluir?</span>
+                                <button
+                                  onClick={() => handleDeleteJob(cargo.id)}
+                                  disabled={deletingJobId === cargo.id}
+                                  className="bg-red-600 hover:bg-red-700 text-white px-3 py-1.5 rounded-lg text-[10px] font-black uppercase disabled:opacity-60 transition-all"
+                                >
+                                  {deletingJobId === cargo.id ? 'Excluindo...' : 'Confirmar'}
+                                </button>
+                                <button
+                                  onClick={() => setConfirmDeleteJobId(null)}
+                                  className="bg-gray-100 dark:bg-gray-800 text-gray-600 dark:text-gray-300 px-3 py-1.5 rounded-lg text-[10px] font-black uppercase transition-all"
+                                >
+                                  Não
+                                </button>
+                              </div>
+                            ) : (
                               <button
-                                onClick={() => handleDeleteJob(cargo.id)}
-                                disabled={deletingJobId === cargo.id}
-                                className="bg-red-600 hover:bg-red-700 text-white px-3 py-1.5 rounded-lg text-[10px] font-black uppercase disabled:opacity-60 transition-all"
+                                onClick={() => setConfirmDeleteJobId(cargo.id)}
+                                className="p-2 rounded-xl text-gray-400 hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-950/20 transition-all"
+                                title="Excluir vaga"
                               >
-                                {deletingJobId === cargo.id ? 'Excluindo...' : 'Confirmar'}
+                                <Trash2 className="h-4 w-4" />
                               </button>
-                              <button
-                                onClick={() => setConfirmDeleteJobId(null)}
-                                className="bg-gray-100 dark:bg-gray-800 text-gray-600 dark:text-gray-300 px-3 py-1.5 rounded-lg text-[10px] font-black uppercase transition-all"
-                              >
-                                Não
-                              </button>
-                            </div>
-                          ) : (
-                            <button
-                              onClick={() => setConfirmDeleteJobId(cargo.id)}
-                              className="p-2 rounded-xl text-gray-400 hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-950/20 transition-all"
-                              title="Excluir vaga"
-                            >
-                              <Trash2 className="h-4 w-4" />
-                            </button>
-                          )}
-                        </div>
+                            )}
+                          </div>
+                        )}
                       </div>
                     </div>
                   );
@@ -2257,21 +2700,63 @@ const AdminDashboard: React.FC = () => {
                           onChange={(e) => setSelectedJobLojaId(e.target.value)}
                           className="w-full px-4 py-3 rounded-xl border border-gray-200 dark:border-gray-700 dark:bg-gray-800 font-bold cursor-pointer"
                         >
-                          <option value="">Rede / Corporativo (Todas as Lojas)</option>
-                          {lojasList.map((loja) => (
-                            <option key={loja.id} value={loja.id}>
-                              {loja.nome} {loja.cidade ? `(${loja.cidade} - ${loja.uf})` : ''} {!loja.ativa ? ' [INATIVA]' : ''}
-                            </option>
-                          ))}
+                          {isGestorMaster && (
+                            <option value="">Rede / Corporativo (Todas as Lojas)</option>
+                          )}
+                          {isFranqueadoOrGerente ? (
+                            userAuthorizedLojas.map((loja) => (
+                              <option key={loja.id} value={loja.id}>
+                                {loja.nome} {loja.cidade ? `(${loja.cidade} - ${loja.uf || loja.estado})` : ''}
+                              </option>
+                            ))
+                          ) : (
+                            lojasList.map((loja) => (
+                              <option key={loja.id} value={loja.id}>
+                                {loja.nome} {loja.cidade ? `(${loja.cidade} - ${loja.uf || loja.estado})` : ''} {!loja.ativa ? ' [INATIVA]' : ''}
+                              </option>
+                            ))
+                          )}
                         </select>
                       </div>
                       <div className="space-y-1.5">
                         <label className="text-[10px] font-black uppercase tracking-widest text-gray-500 dark:text-gray-300">Titulo da LP</label>
                         <input value={jobLanding.title} onChange={(e) => setJobLanding(prev => ({ ...prev, title: e.target.value }))} className="w-full px-4 py-3 rounded-xl border border-gray-200 dark:border-gray-700 dark:bg-gray-800" placeholder="Titulo da vaga" />
                       </div>
-                      <div className="space-y-1.5">
-                        <label className="text-[10px] font-black uppercase tracking-widest text-gray-500 dark:text-gray-300">Imagem Hero (URL)</label>
-                        <input value={jobLanding.heroImageUrl} onChange={(e) => setJobLanding(prev => ({ ...prev, heroImageUrl: e.target.value }))} className="w-full px-4 py-3 rounded-xl border border-gray-200 dark:border-gray-700 dark:bg-gray-800" placeholder="Ex: /vagas/hero-analista.jpg" />
+                      <div className="space-y-1.5 md:col-span-2">
+                        <label className="text-[10px] font-black uppercase tracking-widest text-gray-500 dark:text-gray-300">
+                          Imagem de Destaque / Banner da Vaga
+                        </label>
+                        <div className="flex gap-2">
+                          <input 
+                            value={jobLanding.heroImageUrl} 
+                            onChange={(e) => setJobLanding(prev => ({ ...prev, heroImageUrl: e.target.value }))} 
+                            className="flex-1 px-4 py-3 rounded-xl border border-gray-200 dark:border-gray-700 dark:bg-gray-800 text-xs font-mono" 
+                            placeholder="/imagens/banner%20vagas%20-%20gigante%20pneus.png" 
+                          />
+                          <button
+                            type="button"
+                            onClick={() => setJobLanding(prev => ({ ...prev, heroImageUrl: '/imagens/banner%20vagas%20-%20gigante%20pneus.png' }))}
+                            className="px-3 py-2 rounded-xl bg-gray-100 hover:bg-gray-200 dark:bg-gray-700 dark:hover:bg-gray-600 text-[11px] font-bold text-gray-700 dark:text-gray-200"
+                            title="Restaurar banner oficial Gigante Pneus"
+                          >
+                            Padrão
+                          </button>
+                        </div>
+                        {jobLanding.heroImageUrl && (
+                          <div className="mt-2 relative w-full h-24 rounded-xl overflow-hidden border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-900">
+                            <img
+                              src={jobLanding.heroImageUrl}
+                              alt="Prévia do Banner"
+                              className="w-full h-full object-cover"
+                              onError={(e) => {
+                                (e.currentTarget as HTMLImageElement).src = '/imagens/banner%20vagas%20-%20gigante%20pneus.png';
+                              }}
+                            />
+                            <span className="absolute bottom-1 right-2 bg-black/60 text-white text-[9px] font-bold px-2 py-0.5 rounded">
+                              Prévia
+                            </span>
+                          </div>
+                        )}
                       </div>
                       <div className="space-y-1.5">
                         <label className="text-[10px] font-black uppercase tracking-widest text-gray-500 dark:text-gray-300">Slug da URL</label>
@@ -3142,6 +3627,397 @@ const AdminDashboard: React.FC = () => {
             </div>
           )}
 
+          {/* Aba: GESTÃO DE ACESSOS (MULTI-TENANT V1) */}
+          {activeTab === 'acessos' && isGestorMaster && (
+            <div className="space-y-8 animate-in fade-in duration-500">
+              <div className="bg-white dark:bg-gray-900 rounded-[2.5rem] p-8 border border-gray-100 dark:border-gray-800 shadow-xl flex flex-col md:flex-row md:items-center md:justify-between gap-6">
+                <div>
+                  <span className="text-[10px] font-black uppercase tracking-widest text-red-600 dark:text-red-400">
+                    Governança & Multi-Lojas
+                  </span>
+                  <h2 className="text-3xl font-black text-gray-900 dark:text-white uppercase tracking-tighter mt-1">
+                    Gestão de Acessos
+                  </h2>
+                  <p className="text-sm text-gray-500 dark:text-gray-400 mt-1 max-w-xl">
+                    Cadastre franqueados e gerentes vinculando-os a uma ou mais unidades. Cada usuário terá acesso estrito e exclusivo aos dados de suas unidades.
+                  </p>
+                </div>
+
+                <div className="flex flex-wrap items-center gap-3">
+                  <button
+                    onClick={() => {
+                      setEditingUserId(null);
+                      setUserFormNome('');
+                      setUserFormEmail('');
+                      setUserFormRole('franqueado');
+                      setUserFormLojas([]);
+                      setAdminUserFeedback({ text: '', type: '' });
+                      setUserModalOpen(true);
+                    }}
+                    className="inline-flex items-center gap-2 bg-red-600 hover:bg-red-700 text-white px-5 py-3 rounded-2xl text-xs font-black uppercase shadow-lg transition-all active:scale-95"
+                  >
+                    <Plus className="h-4 w-4" /> Novo Franqueado / Gerente
+                  </button>
+                  <button
+                    onClick={async () => {
+                      setLoadingAdminUsers(true);
+                      try {
+                        const { data: { session } } = await supabase.auth.getSession();
+                        const token = session?.access_token;
+                        const res = await fetch('/api/admin/usuarios', {
+                          headers: { Authorization: `Bearer ${token}` }
+                        });
+                        const json = await res.json();
+                        if (json.success) {
+                          setAdminUsersList(json.usuarios || []);
+                        }
+                      } finally {
+                        setLoadingAdminUsers(false);
+                      }
+                    }}
+                    className="inline-flex items-center gap-2 bg-gray-100 hover:bg-gray-200 dark:bg-gray-800 dark:hover:bg-gray-700 text-gray-700 dark:text-gray-200 px-4 py-3 rounded-2xl text-xs font-black uppercase transition-all"
+                  >
+                    <RefreshCw className={`h-4 w-4 ${loadingAdminUsers ? 'animate-spin' : ''}`} /> Atualizar
+                  </button>
+                </div>
+              </div>
+
+              {/* Tabela de Usuários */}
+              <div className="bg-white dark:bg-gray-900 rounded-[2.5rem] border border-gray-100 dark:border-gray-800 shadow-xl overflow-hidden">
+                <div className="overflow-x-auto">
+                  <table className="w-full text-left border-collapse text-sm">
+                    <thead>
+                      <tr className="border-b border-gray-100 dark:border-gray-800 bg-gray-50/50 dark:bg-gray-800/30 text-[10px] uppercase font-black tracking-widest text-gray-400">
+                        <th className="py-4 px-6">Usuário</th>
+                        <th className="py-4 px-6">Perfil</th>
+                        <th className="py-4 px-6">Unidades Autorizadas</th>
+                        <th className="py-4 px-6">Situação</th>
+                        <th className="py-4 px-6 text-right">Ações</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-gray-100 dark:divide-gray-800">
+                      {loadingAdminUsers ? (
+                        <tr>
+                          <td colSpan={5} className="py-12 text-center text-gray-400">
+                            <Loader2 className="h-8 w-8 animate-spin mx-auto text-red-600 mb-2" />
+                            Carregando usuários e permissões...
+                          </td>
+                        </tr>
+                      ) : adminUsersList.length === 0 ? (
+                        <tr>
+                          <td colSpan={5} className="py-12 text-center text-gray-400">
+                            Nenhum franqueado cadastrado ainda. Clique em "Novo Franqueado" para criar o primeiro acesso.
+                          </td>
+                        </tr>
+                      ) : (
+                        adminUsersList.map((user) => (
+                          <tr key={user.id} className="hover:bg-gray-50/50 dark:hover:bg-gray-800/20 transition-colors">
+                            <td className="py-4 px-6">
+                              <div className="font-bold text-gray-900 dark:text-white">{user.nome}</div>
+                              <div className="text-xs text-gray-400 font-mono mt-0.5">{user.email}</div>
+                            </td>
+                            <td className="py-4 px-6">
+                              <span className={`inline-flex items-center px-2.5 py-1 rounded-lg text-[10px] font-black uppercase tracking-wider ${
+                                user.role === 'franqueadora_admin' 
+                                  ? 'bg-red-600 text-white' 
+                                  : user.role === 'rh_corporativo'
+                                  ? 'bg-blue-600 text-white'
+                                  : user.role === 'franqueado'
+                                  ? 'bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300'
+                                  : 'bg-amber-100 text-amber-800 dark:bg-amber-950 dark:text-amber-300'
+                              }`}>
+                                {user.role === 'franqueadora_admin' ? 'Master' : (user.role === 'franqueado' ? 'Franqueado' : (user.role === 'gerente' ? 'Gerente' : user.role))}
+                              </span>
+                            </td>
+                            <td className="py-4 px-6">
+                              {user.role === 'franqueadora_admin' || user.role === 'rh_corporativo' ? (
+                                <span className="text-xs font-bold text-gray-500 italic">Rede Inteira (Todas as Lojas)</span>
+                              ) : user.lojas && user.lojas.length > 0 ? (
+                                <div className="flex flex-wrap gap-1.5 max-w-md">
+                                  {user.lojas.map((l: any) => (
+                                    <span key={l.id} className="inline-flex items-center gap-1 bg-gray-100 dark:bg-gray-800 text-gray-700 dark:text-gray-300 px-2 py-0.5 rounded text-[11px] font-semibold">
+                                      <Building2 className="h-3 w-3 text-red-600 shrink-0" />
+                                      {l.nome}
+                                    </span>
+                                  ))}
+                                </div>
+                              ) : (
+                                <span className="text-xs font-bold text-amber-600 dark:text-amber-400 flex items-center gap-1">
+                                  <AlertTriangle className="h-3.5 w-3.5" /> Nenhuma loja vinculada
+                                </span>
+                              )}
+                            </td>
+                            <td className="py-4 px-6">
+                              <span className={`inline-flex items-center px-2 py-0.5 rounded text-[10px] font-black uppercase ${
+                                user.ativo ? 'bg-green-100 text-green-700 dark:bg-green-950 dark:text-green-300' : 'bg-red-100 text-red-700 dark:bg-red-950 dark:text-red-300'
+                              }`}>
+                                {user.ativo ? 'Ativo' : 'Desativado'}
+                              </span>
+                            </td>
+                            <td className="py-4 px-6 text-right">
+                              {user.role !== 'franqueadora_admin' && (
+                                <div className="inline-flex items-center gap-2">
+                                  <button
+                                    onClick={() => {
+                                      setEditingUserId(user.id);
+                                      setUserFormNome(user.nome);
+                                      setUserFormEmail(user.email);
+                                      setUserFormRole(user.role === 'gerente' ? 'gerente' : 'franqueado');
+                                      setUserFormLojas((user.lojas || []).map((l: any) => l.id));
+                                      setAdminUserFeedback({ text: '', type: '' });
+                                      setUserModalOpen(true);
+                                    }}
+                                    className="px-3 py-1.5 rounded-lg bg-gray-100 hover:bg-gray-200 dark:bg-gray-800 dark:hover:bg-gray-700 text-xs font-bold text-gray-700 dark:text-gray-200 transition-all"
+                                  >
+                                    Editar Unidades
+                                  </button>
+                                  <button
+                                    onClick={async () => {
+                                      if (!confirm(`Deseja realmente ${user.ativo ? 'desativar' : 'reativar'} o acesso de ${user.nome}?`)) return;
+                                      const { data: { session } } = await supabase.auth.getSession();
+                                      const token = session?.access_token;
+                                      const res = await fetch('/api/admin/usuarios', {
+                                        method: 'PATCH',
+                                        headers: {
+                                          Authorization: `Bearer ${token}`,
+                                          'Content-Type': 'application/json'
+                                        },
+                                        body: JSON.stringify({ userId: user.id, ativo: !user.ativo })
+                                      });
+                                      const json = await res.json();
+                                      if (json.success) {
+                                        // Atualiza na lista local
+                                        setAdminUsersList(prev => prev.map(u => u.id === user.id ? { ...u, ativo: !u.ativo } : u));
+                                      } else {
+                                        alert(json.mensagem || 'Falha ao alterar situação do usuário');
+                                      }
+                                    }}
+                                    className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all ${
+                                      user.ativo 
+                                        ? 'bg-amber-50 hover:bg-amber-100 text-amber-700 dark:bg-amber-950/40 dark:text-amber-300' 
+                                        : 'bg-green-50 hover:bg-green-100 text-green-700 dark:bg-green-950/40 dark:text-green-300'
+                                    }`}
+                                  >
+                                    {user.ativo ? 'Desativar' : 'Reativar'}
+                                  </button>
+                                </div>
+                              )}
+                            </td>
+                          </tr>
+                        ))
+                      )}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+
+              {/* Modal de Cadastro / Edição de Franqueado */}
+              {userModalOpen && (
+                <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-in fade-in">
+                  <div className="bg-white dark:bg-gray-900 rounded-[2.5rem] max-w-2xl w-full p-8 border border-gray-100 dark:border-gray-800 shadow-2xl space-y-6 max-h-[90vh] overflow-y-auto">
+                    <div className="flex items-center justify-between border-b border-gray-100 dark:border-gray-800 pb-4">
+                      <div>
+                        <h3 className="text-xl font-black text-gray-900 dark:text-white uppercase tracking-tight">
+                          {editingUserId ? 'Editar Unidades do Usuário' : 'Novo Franqueado / Gerente'}
+                        </h3>
+                        <p className="text-xs text-gray-400 mt-0.5">
+                          {editingUserId ? 'Atualize as lojas autorizadas para este gestor.' : 'O novo gestor receberá um convite por e-mail com link seguro para definir sua senha pessoal.'}
+                        </p>
+                      </div>
+                      <button onClick={() => setUserModalOpen(false)} className="p-2 rounded-xl text-gray-400 hover:text-gray-600">
+                        <X className="h-5 w-5" />
+                      </button>
+                    </div>
+
+                    <div className="space-y-4">
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        <div className="space-y-1">
+                          <label className="text-[10px] font-black uppercase tracking-widest text-gray-400">Nome Completo</label>
+                          <input
+                            type="text"
+                            value={userFormNome}
+                            disabled={Boolean(editingUserId)}
+                            onChange={e => setUserFormNome(e.target.value)}
+                            className="w-full px-4 py-3 rounded-xl border border-gray-200 dark:border-gray-700 dark:bg-gray-800 font-bold text-sm disabled:opacity-60"
+                            placeholder="Ex: Carlos Silva"
+                          />
+                        </div>
+                        <div className="space-y-1">
+                          <label className="text-[10px] font-black uppercase tracking-widest text-gray-400">E-mail Corporativo</label>
+                          <input
+                            type="email"
+                            value={userFormEmail}
+                            disabled={Boolean(editingUserId)}
+                            onChange={e => setUserFormEmail(e.target.value)}
+                            className="w-full px-4 py-3 rounded-xl border border-gray-200 dark:border-gray-700 dark:bg-gray-800 font-bold text-sm disabled:opacity-60"
+                            placeholder="gestor@gigantepneus.com.br"
+                          />
+                        </div>
+                      </div>
+
+                      <div className="space-y-1">
+                        <label className="text-[10px] font-black uppercase tracking-widest text-gray-400">Perfil de Acesso</label>
+                        <select
+                          value={userFormRole}
+                          onChange={e => setUserFormRole(e.target.value as any)}
+                          className="w-full px-4 py-3 rounded-xl border border-gray-200 dark:border-gray-700 dark:bg-gray-800 font-bold text-sm"
+                        >
+                          <option value="franqueado">Franqueado (Gestor de Franquia)</option>
+                          <option value="gerente">Gerente (Gestor Operacional de Loja)</option>
+                        </select>
+                      </div>
+
+                      {/* Seleção de Múltiplas Unidades */}
+                      <div className="space-y-2 pt-2">
+                        <div className="flex items-center justify-between">
+                          <label className="text-[10px] font-black uppercase tracking-widest text-gray-400">
+                            Unidades Autorizadas ({userFormLojas.length} selecionada(s))
+                          </label>
+                          <div className="flex gap-2">
+                            <button
+                              type="button"
+                              onClick={() => setUserFormLojas(lojasList.filter(l => l.ativa).map(l => l.id))}
+                              className="text-[10px] font-bold text-red-600 hover:underline"
+                            >
+                              Selecionar Todas
+                            </button>
+                            <span className="text-gray-300">|</span>
+                            <button
+                              type="button"
+                              onClick={() => setUserFormLojas([])}
+                              className="text-[10px] font-bold text-gray-400 hover:underline"
+                            >
+                              Limpar
+                            </button>
+                          </div>
+                        </div>
+
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 max-h-56 overflow-y-auto p-3 rounded-xl border border-gray-200 dark:border-gray-700 bg-gray-50/50 dark:bg-gray-800/40">
+                          {lojasList.filter(l => l.ativa).map(loja => {
+                            const isSelected = userFormLojas.includes(loja.id);
+                            return (
+                              <label
+                                key={loja.id}
+                                className={`flex items-center gap-2.5 p-2 rounded-lg cursor-pointer border transition-all text-xs font-semibold ${
+                                  isSelected
+                                    ? 'bg-red-50 dark:bg-red-950/40 border-red-300 dark:border-red-800 text-red-900 dark:text-red-200'
+                                    : 'border-transparent hover:bg-gray-100 dark:hover:bg-gray-700/50 text-gray-700 dark:text-gray-300'
+                                }`}
+                              >
+                                <input
+                                  type="checkbox"
+                                  checked={isSelected}
+                                  onChange={e => {
+                                    if (e.target.checked) {
+                                      setUserFormLojas(prev => [...prev, loja.id]);
+                                    } else {
+                                      setUserFormLojas(prev => prev.filter(id => id !== loja.id));
+                                    }
+                                  }}
+                                  className="rounded text-red-600 focus:ring-red-500 h-4 w-4"
+                                />
+                                <span className="truncate">
+                                  {loja.nome} <span className="text-gray-400 font-normal">({loja.cidade})</span>
+                                </span>
+                              </label>
+                            );
+                          })}
+                        </div>
+                      </div>
+
+                      {adminUserFeedback.text && (
+                        <div className={`p-4 rounded-xl text-xs font-bold ${
+                          adminUserFeedback.type === 'error'
+                            ? 'bg-red-50 text-red-600 dark:bg-red-900/30'
+                            : 'bg-green-50 text-green-600 dark:bg-green-900/30'
+                        }`}>
+                          {adminUserFeedback.text}
+                        </div>
+                      )}
+                    </div>
+
+                    <div className="flex justify-end gap-3 pt-4 border-t border-gray-100 dark:border-gray-800">
+                      <button
+                        onClick={() => setUserModalOpen(false)}
+                        className="px-5 py-2.5 rounded-xl bg-gray-100 dark:bg-gray-800 text-gray-700 dark:text-gray-200 text-xs font-black uppercase"
+                      >
+                        Cancelar
+                      </button>
+                      <button
+                        disabled={savingAdminUser || userFormLojas.length === 0 || (!editingUserId && (!userFormNome || !userFormEmail))}
+                        onClick={async () => {
+                          setSavingAdminUser(true);
+                          setAdminUserFeedback({ text: '', type: '' });
+                          try {
+                            const { data: { session } } = await supabase.auth.getSession();
+                            const token = session?.access_token;
+
+                            let res: Response;
+                            if (editingUserId) {
+                              res = await fetch('/api/admin/usuarios', {
+                                method: 'PATCH',
+                                headers: {
+                                  Authorization: `Bearer ${token}`,
+                                  'Content-Type': 'application/json'
+                                },
+                                body: JSON.stringify({
+                                  userId: editingUserId,
+                                  role: userFormRole,
+                                  lojaIds: userFormLojas
+                                })
+                              });
+                            } else {
+                              res = await fetch('/api/admin/usuarios', {
+                                method: 'POST',
+                                headers: {
+                                  Authorization: `Bearer ${token}`,
+                                  'Content-Type': 'application/json'
+                                },
+                                body: JSON.stringify({
+                                  nome: userFormNome,
+                                  email: userFormEmail,
+                                  role: userFormRole,
+                                  lojaIds: userFormLojas,
+                                  redirectTo: `${window.location.origin}/reset-password`
+                                })
+                              });
+                            }
+
+                            const json = await res.json();
+                            if (json.success) {
+                              setAdminUserFeedback({ text: json.mensagem, type: 'success' });
+                              // Recarrega lista
+                              setTimeout(async () => {
+                                setUserModalOpen(false);
+                                const reloadRes = await fetch('/api/admin/usuarios', {
+                                  headers: { Authorization: `Bearer ${token}` }
+                                });
+                                const reloadJson = await reloadRes.json();
+                                if (reloadJson.success) {
+                                  setAdminUsersList(reloadJson.usuarios || []);
+                                }
+                              }, 1200);
+                            } else {
+                              setAdminUserFeedback({ text: json.mensagem || 'Falha ao salvar usuário', type: 'error' });
+                            }
+                          } catch (err: any) {
+                            setAdminUserFeedback({ text: err.message || 'Erro de conexão', type: 'error' });
+                          } finally {
+                            setSavingAdminUser(false);
+                          }
+                        }}
+                        className="px-6 py-2.5 rounded-xl bg-red-600 hover:bg-red-700 text-white text-xs font-black uppercase disabled:opacity-50 transition-all flex items-center gap-2"
+                      >
+                        {savingAdminUser ? <Loader2 className="h-4 w-4 animate-spin" /> : <Check className="h-4 w-4" />}
+                        {editingUserId ? 'Salvar Unidades' : 'Enviar Convite'}
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
+
           {/* Aba: CONFIGURAÇÕES */}
           {activeTab === 'settings' && (
             <div className="space-y-6 animate-in slide-in-from-right-4 duration-500">
@@ -3160,12 +4036,14 @@ const AdminDashboard: React.FC = () => {
                 >
                   Minha Conta & Segurança
                 </button>
-                <button
-                  onClick={() => setSettingsSubTab('usuarios')}
-                  className={`text-sm font-black uppercase tracking-widest pb-3 px-2 border-b-2 transition-all ${settingsSubTab === 'usuarios' ? 'border-red-600 text-red-600' : 'border-transparent text-gray-500 hover:text-gray-700'}`}
-                >
-                  Gestão de Usuários
-                </button>
+                {isGestorMaster && (
+                  <button
+                    onClick={() => setSettingsSubTab('usuarios')}
+                    className={`text-sm font-black uppercase tracking-widest pb-3 px-2 border-b-2 transition-all ${settingsSubTab === 'usuarios' ? 'border-red-600 text-red-600' : 'border-transparent text-gray-500 hover:text-gray-700'}`}
+                  >
+                    Gestão de Usuários
+                  </button>
+                )}
               </div>
 
               {settingsSubTab === 'geral' && (
@@ -3450,58 +4328,30 @@ const AdminDashboard: React.FC = () => {
             </div>
           )}
 
-          {settingsSubTab === 'usuarios' && (
-            <div className="bg-white dark:bg-gray-900 p-10 rounded-[3rem] border border-gray-100 dark:border-gray-800 shadow-xl w-full max-w-2xl">
-              <div className="mb-8 border-b border-gray-100 dark:border-gray-800 pb-6">
+          {isGestorMaster && settingsSubTab === 'usuarios' && (
+            <div className="bg-white dark:bg-gray-900 p-10 rounded-[3rem] border border-gray-100 dark:border-gray-800 shadow-xl w-full max-w-2xl space-y-6">
+              <div className="border-b border-gray-100 dark:border-gray-800 pb-6">
                 <h3 className="font-black text-xl text-gray-900 dark:text-white uppercase tracking-tighter flex items-center gap-3">
-                  <Users className="text-red-600 h-6 w-6" /> Adicionar Novo Usuário
+                  <Shield className="text-red-600 h-6 w-6" /> Gestão de Acessos & Franqueados
                 </h3>
                 <p className="text-sm text-gray-500 dark:text-gray-400 mt-2 font-medium">
-                  Configure acesso ao painel administrativo para novos recrutadores ou gestores.
+                  O gerenciamento completo de usuários, perfis e permissões multi-lojas agora é realizado na aba dedicada <strong>"Gestão de Acessos"</strong> no menu lateral principal.
                 </p>
               </div>
 
-              <form onSubmit={handleCreateUser} className="space-y-6">
-                <div className="space-y-2">
-                  <label className="text-xs font-black uppercase tracking-widest text-gray-500 dark:text-gray-300">E-mail de Acesso</label>
-                  <input 
-                    type="email" 
-                    required
-                    value={newUserEmail}
-                    onChange={e => setNewUserEmail(e.target.value)}
-                    className="w-full px-5 py-4 rounded-2xl border border-gray-200 dark:border-gray-800 dark:bg-gray-800 outline-none focus:ring-4 focus:ring-red-600/10 focus:border-red-600 font-bold text-sm dark:text-white"
-                    placeholder="nome@gigante.com.br"
-                  />
+              <div className="p-5 rounded-2xl bg-gray-50 dark:bg-gray-800/60 border border-gray-200 dark:border-gray-700 flex items-center justify-between gap-4">
+                <div>
+                  <h4 className="font-bold text-sm text-gray-900 dark:text-white">Acessar Controle de Franqueados</h4>
+                  <p className="text-xs text-gray-400 mt-0.5">Cadastre usuários, vincule múltiplas lojas e ative/desative acessos.</p>
                 </div>
-                
-                <div className="space-y-2">
-                  <label className="text-xs font-black uppercase tracking-widest text-gray-500 dark:text-gray-300">Senha Padrão</label>
-                  <input 
-                    type="password" 
-                    required
-                    minLength={6}
-                    value={newUserPassword}
-                    onChange={e => setNewUserPassword(e.target.value)}
-                    className="w-full px-5 py-4 rounded-2xl border border-gray-200 dark:border-gray-800 dark:bg-gray-800 outline-none focus:ring-4 focus:ring-red-600/10 focus:border-red-600 font-bold text-sm dark:text-white"
-                    placeholder="No mínimo 6 caracteres"
-                  />
-                </div>
-
-                {userMsg.text && (
-                  <div className={`p-4 rounded-2xl text-sm font-bold ${userMsg.type === 'error' ? 'bg-red-50 text-red-600 dark:bg-red-900/30' : 'bg-green-50 text-green-600 dark:bg-green-900/30'}`}>
-                    {userMsg.text}
-                  </div>
-                )}
-
-                <button 
-                  type="submit" 
-                  disabled={creatingUser}
-                  className="w-full bg-red-600 hover:bg-red-700 text-white font-black uppercase py-4 rounded-2xl transition-all shadow-md active:scale-95 flex items-center justify-center gap-2 disabled:opacity-60"
+                <button
+                  type="button"
+                  onClick={() => setActiveTab('acessos')}
+                  className="px-4 py-2.5 rounded-xl bg-red-600 hover:bg-red-700 text-white font-black text-xs uppercase shadow transition-all"
                 >
-                  {creatingUser ? <Loader2 className="h-5 w-5 animate-spin" /> : <Plus className="h-5 w-5" />}
-                  Cadastrar Usuário
+                  Ir para Gestão de Acessos
                 </button>
-              </form>
+              </div>
             </div>
           )}
 
@@ -3511,58 +4361,330 @@ const AdminDashboard: React.FC = () => {
         </div>
       </main>
 
-      {/* Detail Modal (Banco de Talentos) */}
-      {selectedResume && (
-        <div className="fixed inset-0 z-[60] flex items-center justify-center p-4 bg-black/80 backdrop-blur-xl animate-in fade-in duration-300">
-          <div className="bg-white dark:bg-gray-900 rounded-[3rem] w-full max-w-2xl max-h-[90vh] overflow-hidden flex flex-col shadow-2xl border border-gray-100 dark:border-gray-800">
-            <div className="px-8 py-6 border-b border-gray-100 dark:border-gray-800 flex items-center justify-between bg-gray-50/30 dark:bg-gray-800/30">
-              <h2 className="text-xl font-black text-gray-900 dark:text-white uppercase tracking-tighter">Detalhes do Candidato</h2>
-              <button onClick={() => setSelectedResume(null)} className="p-2 hover:bg-red-100 dark:hover:bg-red-900/30 text-red-600 rounded-full transition-colors">
-                <X className="h-6 w-6" />
-              </button>
-            </div>
-            
-            <div className="p-10 overflow-y-auto flex-grow space-y-10">
-              <div className="flex flex-col md:flex-row md:items-start justify-between gap-8">
-                <div>
-                  <div className="text-4xl font-black text-gray-900 dark:text-white leading-none uppercase tracking-tighter mb-4">{selectedResume.nome}</div>
-                  <div className="flex flex-wrap items-center gap-3 text-[10px] font-black text-gray-500 dark:text-gray-400 uppercase">
-                    <span className="flex items-center gap-1.5 bg-gray-100 dark:bg-gray-800 px-3 py-1.5 rounded-xl border border-gray-200 dark:border-gray-700 tracking-widest"><MapPin className="h-3.5 w-3.5" /> {selectedResume.cidade}</span>
-                    <span className="flex items-center gap-1.5 bg-red-600 text-white px-3 py-1.5 rounded-xl tracking-widest"><Briefcase className="h-3.5 w-3.5" /> {selectedResume.vaga_interesse}</span>
-                  </div>
-                  <div className="mt-4 text-sm text-gray-600 dark:text-gray-300">
-                    <p><strong>E-mail:</strong> {selectedResume.email}</p>
-                    <p><strong>Telefone:</strong> {selectedResume.telefone}</p>
-                  </div>
-                  {selectedResume.resumo && (
-                    <div className="mt-6 p-5 bg-gray-50 dark:bg-gray-800 rounded-2xl border border-gray-100 dark:border-gray-700">
-                      <h4 className="text-[10px] font-black text-gray-400 uppercase tracking-widest mb-3">Resumo / Apresentação</h4>
-                      <p className="text-sm text-gray-700 dark:text-gray-300 whitespace-pre-wrap leading-relaxed">
-                        {selectedResume.resumo}
-                      </p>
-                    </div>
+      {/* Detail Modal (Dossiê Profissional - Banco de Talentos V1) */}
+      {selectedResume && (() => {
+        const initials = selectedResume.nome
+          ? selectedResume.nome.split(' ').filter(Boolean).map(n => n[0]).slice(0, 2).join('').toUpperCase()
+          : 'CP';
+        const cleanPhoneDigits = (selectedResume.telefone || '').replace(/\D/g, '');
+        const whatsappUrl = cleanPhoneDigits.length >= 10
+          ? `https://wa.me/55${cleanPhoneDigits}?text=${encodeURIComponent(`Olá ${selectedResume.nome}, tudo bem? Sou da equipe de Recursos Humanos da Gigante Pneus e gostaria de conversar sobre sua candidatura.`)}`
+          : null;
+        const exp = selectedResume.experiencia_profissional;
+        const isPrimeiroEmprego = exp?.primeiro_emprego || exp?.tipo_experiencia === 'primeiro_emprego';
+        const hasApresentacao = Boolean(selectedResume.apresentacao_pessoal || selectedResume.resumo);
+        const apresentacaoTexto = selectedResume.apresentacao_pessoal || selectedResume.resumo || '';
+        const hasCurriculoAnexo = Boolean(selectedResume.possui_curriculo || selectedResume.curriculo_id || selectedResume.curriculo_file_id);
+
+        return (
+          <div className="fixed inset-0 z-[60] flex items-center justify-center p-4 bg-black/80 backdrop-blur-xl animate-in fade-in duration-300">
+            <div className="bg-white dark:bg-gray-900 rounded-[3rem] w-full max-w-3xl max-h-[92vh] overflow-hidden flex flex-col shadow-2xl border border-gray-100 dark:border-gray-800">
+              
+              {/* Top Bar do Modal */}
+              <div className="px-8 py-5 border-b border-gray-100 dark:border-gray-800 flex items-center justify-between bg-gray-50/50 dark:bg-gray-800/50">
+                <div className="flex items-center gap-3">
+                  <span className="bg-red-600 text-white text-[10px] font-black uppercase tracking-widest px-3 py-1 rounded-full">
+                    Dossiê do Candidato
+                  </span>
+                  {selectedResume.protocolo && (
+                    <span className="text-[11px] font-mono font-bold text-gray-500 dark:text-gray-400 bg-gray-200/60 dark:bg-gray-700/60 px-2.5 py-0.5 rounded-lg select-all">
+                      {selectedResume.protocolo}
+                    </span>
                   )}
                 </div>
                 <button 
-                  onClick={() => handleVerCurriculo(selectedResume)}
-                  className="bg-black dark:bg-white text-white dark:text-black px-8 py-4 rounded-2xl font-black uppercase flex items-center justify-center gap-3 transition-all shadow-xl text-sm group active:scale-95"
+                  onClick={() => setSelectedResume(null)} 
+                  className="p-2 hover:bg-red-100 dark:hover:bg-red-900/30 text-red-600 rounded-full transition-colors"
                 >
-                  <Download className="h-5 w-5 group-hover:translate-y-0.5 transition-transform" /> Ver Currículo
+                  <X className="h-6 w-6" />
+                </button>
+              </div>
+              
+              {/* Conteúdo com rolagem do Dossiê */}
+              <div className="p-8 md:p-10 overflow-y-auto flex-grow space-y-8">
+                
+                {/* Cabeçalho do Perfil com Avatar de Iniciais */}
+                <div className="flex flex-col sm:flex-row items-start sm:items-center gap-6 pb-6 border-b border-gray-100 dark:border-gray-800">
+                  <div className="w-20 h-20 rounded-2xl bg-gradient-to-tr from-red-600 to-red-500 text-white flex items-center justify-center font-black text-2xl shadow-lg shrink-0">
+                    {initials}
+                  </div>
+                  <div className="min-w-0 flex-1">
+                    <h2 className="text-2xl md:text-3xl font-black text-gray-900 dark:text-white uppercase tracking-tight leading-tight">
+                      {selectedResume.nome}
+                    </h2>
+                    <div className="flex flex-wrap items-center gap-2 mt-2">
+                      <span className="inline-flex items-center gap-1 bg-red-600 text-white text-[11px] font-bold px-3 py-1 rounded-xl tracking-wide">
+                        <Briefcase className="h-3.5 w-3.5" /> {selectedResume.vaga_interesse}
+                      </span>
+                      <span className="inline-flex items-center gap-1 bg-gray-100 dark:bg-gray-800 text-gray-700 dark:text-gray-300 text-[11px] font-bold px-3 py-1 rounded-xl border border-gray-200 dark:border-gray-700" title="Cidade e Estado de Residência do Candidato">
+                        <Home className="h-3.5 w-3.5 text-red-600" /> Reside em: {selectedResume.cidade_residencia || selectedResume.candidato_cidade || 'Não informada'}
+                      </span>
+                      <span className="inline-flex items-center gap-1 bg-gray-100 dark:bg-gray-800 text-gray-700 dark:text-gray-300 text-[11px] font-bold px-3 py-1 rounded-xl border border-gray-200 dark:border-gray-700" title="Unidade Pretendida">
+                        <Building2 className="h-3.5 w-3.5 text-gray-500" /> Unidade: {selectedResume.unidade_pretendida || selectedResume.loja_nome || 'Banco de Talentos Corporativo'}
+                      </span>
+                      <span className="inline-flex items-center gap-1 bg-emerald-50 dark:bg-emerald-950/40 text-emerald-700 dark:text-emerald-300 text-[11px] font-bold px-3 py-1 rounded-xl border border-emerald-200 dark:border-emerald-900/40">
+                        <ShieldCheck className="h-3.5 w-3.5" /> {selectedResume.status_candidatura || 'Recebido'}
+                      </span>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Seção 1: Apresentação Pessoal ("Conte um pouco sobre você") */}
+                <div className="space-y-3">
+                  <div className="flex items-center justify-between">
+                    <h3 className="text-xs font-black uppercase text-gray-400 dark:text-gray-500 tracking-widest flex items-center gap-2">
+                      <UserCheck className="h-4 w-4 text-red-600" />
+                      Apresentação Pessoal (Conte um pouco sobre você)
+                    </h3>
+                    {hasApresentacao && (
+                      <span className="text-[10px] font-bold text-gray-400 bg-gray-100 dark:bg-gray-800 px-2 py-0.5 rounded-md">
+                        {apresentacaoTexto.length} caracteres
+                      </span>
+                    )}
+                  </div>
+                  
+                  {hasApresentacao ? (
+                    <div className="p-5 bg-gray-50/80 dark:bg-gray-800/60 rounded-2xl border border-gray-100 dark:border-gray-700">
+                      <p className="text-sm text-gray-800 dark:text-gray-200 whitespace-pre-wrap leading-relaxed">
+                        {apresentacaoTexto}
+                      </p>
+                    </div>
+                  ) : (
+                    <p className="text-xs text-gray-400 italic">Nenhuma apresentação pessoal informada.</p>
+                  )}
+                </div>
+
+                {/* Seção 2: Experiência Profissional e Habilidades */}
+                <div className="space-y-3">
+                  <h3 className="text-xs font-black uppercase text-gray-400 dark:text-gray-500 tracking-widest flex items-center gap-2">
+                    <Briefcase className="h-4 w-4 text-red-600" />
+                    Experiência Profissional & Habilidades
+                  </h3>
+
+                  <div className="p-5 bg-gray-50/80 dark:bg-gray-800/60 rounded-2xl border border-gray-100 dark:border-gray-700 space-y-4">
+                    {/* Badge do perfil de experiência */}
+                    <div className="flex items-center gap-2">
+                      {isPrimeiroEmprego ? (
+                        <span className="inline-flex items-center gap-1.5 bg-amber-100 dark:bg-amber-900/40 text-amber-800 dark:text-amber-300 text-xs font-bold px-3 py-1 rounded-full">
+                          <Award className="h-3.5 w-3.5" /> Busca Primeiro Emprego (Sem experiência anterior em carteira)
+                        </span>
+                      ) : (
+                        <span className="inline-flex items-center gap-1.5 bg-blue-100 dark:bg-blue-900/40 text-blue-800 dark:text-blue-300 text-xs font-bold px-3 py-1 rounded-full">
+                          <Briefcase className="h-3.5 w-3.5" /> Possui Experiência Profissional Anterior
+                        </span>
+                      )}
+                      {exp?.disponibilidade_inicio && (
+                        <span className="inline-flex items-center gap-1 text-[11px] font-bold text-gray-600 dark:text-gray-300 bg-white dark:bg-gray-700 px-2.5 py-1 rounded-full border border-gray-200 dark:border-gray-600">
+                          <Clock className="h-3 w-3 text-red-600" /> Início: {exp.disponibilidade_inicio}
+                        </span>
+                      )}
+                    </div>
+
+                    {/* Detalhes de experiência anterior */}
+                    {!isPrimeiroEmprego && exp && (
+                      <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-3 pt-2 border-t border-gray-200/60 dark:border-gray-700/60 text-xs">
+                        <div>
+                          <span className="text-[10px] font-bold uppercase text-gray-400 block">Último Cargo / Função</span>
+                          <span className="font-bold text-gray-800 dark:text-white">{exp.cargo_funcao || 'Não informado'}</span>
+                        </div>
+                        <div>
+                          <span className="text-[10px] font-bold uppercase text-gray-400 block">Última Empresa</span>
+                          <span className="font-bold text-gray-800 dark:text-white">{exp.ultima_empresa || 'Não informada'}</span>
+                        </div>
+                        <div>
+                          <span className="text-[10px] font-bold uppercase text-gray-400 block">Área de Atuação</span>
+                          <span className="font-bold text-gray-800 dark:text-white">{exp.area_atuacao || 'Não informada'}</span>
+                        </div>
+                        <div>
+                          <span className="text-[10px] font-bold uppercase text-gray-400 block">Tempo de Experiência</span>
+                          <span className="font-bold text-gray-800 dark:text-white">{exp.tempo_experiencia || 'Não informado'}</span>
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Principais atividades desenvolvidas */}
+                    {exp?.principais_atividades && (
+                      <div className="pt-2">
+                        <span className="text-[10px] font-bold uppercase text-gray-400 block mb-1">Principais Atividades:</span>
+                        <p className="text-xs text-gray-700 dark:text-gray-300 whitespace-pre-wrap leading-relaxed">
+                          {exp.principais_atividades}
+                        </p>
+                      </div>
+                    )}
+
+                    {/* Habilidades e competências */}
+                    {exp?.habilidades && exp.habilidades.length > 0 && (
+                      <div className="pt-2">
+                        <span className="text-[10px] font-bold uppercase text-gray-400 block mb-2">Habilidades e Competências:</span>
+                        <div className="flex flex-wrap gap-1.5">
+                          {exp.habilidades.map((h, i) => (
+                            <span key={i} className="text-[11px] font-semibold bg-white dark:bg-gray-700 text-gray-800 dark:text-gray-200 px-2.5 py-1 rounded-lg border border-gray-200 dark:border-gray-600">
+                              {h}
+                            </span>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                </div>
+
+                {/* Seção 3: Indicador do Currículo (3 Estados) */}
+                <div className="space-y-3">
+                  <h3 className="text-xs font-black uppercase text-gray-400 dark:text-gray-500 tracking-widest flex items-center gap-2">
+                    <FileText className="h-4 w-4 text-red-600" />
+                    Situação do Currículo Anexado
+                  </h3>
+
+                  {hasCurriculoAnexo ? (
+                    /* ESTADO 1: Disponível */
+                    <div className="p-5 bg-green-50/70 dark:bg-green-950/20 border border-green-200 dark:border-green-900/50 rounded-2xl flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+                      <div className="flex items-center gap-3">
+                        <div className="p-3 bg-green-100 dark:bg-green-900/40 text-green-700 dark:text-green-300 rounded-xl">
+                          <FileCheck2 className="h-6 w-6" />
+                        </div>
+                        <div>
+                          <p className="text-xs font-black uppercase text-green-800 dark:text-green-300">
+                            Currículo em Anexo Disponível
+                          </p>
+                          <p className="text-xs text-green-700/80 dark:text-green-400/80">
+                            {selectedResume.curriculo_nome_arquivo || 'Documento PDF/DOCX armazenado no Google Drive corporativo'}
+                          </p>
+                        </div>
+                      </div>
+                      <button 
+                        onClick={() => handleVerCurriculo(selectedResume)}
+                        className="bg-black dark:bg-white text-white dark:text-black hover:bg-gray-800 px-6 py-3.5 rounded-xl font-bold uppercase text-xs flex items-center gap-2 transition-all shadow-md active:scale-95 shrink-0"
+                      >
+                        <Download className="h-4 w-4" /> Ver / Baixar Currículo
+                      </button>
+                    </div>
+                  ) : (
+                    /* ESTADO 2: Não anexado pelo candidato */
+                    <div className="p-5 bg-blue-50/70 dark:bg-blue-950/20 border border-blue-200 dark:border-blue-900/50 rounded-2xl flex items-start gap-3">
+                      <div className="p-2.5 bg-blue-100 dark:bg-blue-900/40 text-blue-700 dark:text-blue-300 rounded-xl shrink-0 mt-0.5">
+                        <UserCheck className="h-5 w-5" />
+                      </div>
+                      <div>
+                        <p className="text-xs font-black uppercase text-blue-800 dark:text-blue-300">
+                          Candidato optou por não anexar currículo em arquivo
+                        </p>
+                        <p className="text-xs text-blue-700/80 dark:text-blue-400/80 mt-0.5 leading-relaxed">
+                          A ficha profissional e a apresentação pessoal foram preenchidas diretamente no formulário oficial do Banco de Talentos. A avaliação do RH deve ser realizada com base nas informações descritas nas seções acima.
+                        </p>
+                      </div>
+                    </div>
+                  )}
+                </div>
+
+                {/* Seção 4: Contato Rápido e Dados Complementares */}
+                <div className="space-y-3">
+                  <h3 className="text-xs font-black uppercase text-gray-400 dark:text-gray-500 tracking-widest flex items-center gap-2">
+                    <PhoneCall className="h-4 w-4 text-red-600" />
+                    Contato & Informações Cadastrais
+                  </h3>
+
+                  <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3">
+                    {/* Cidade e Estado de Residência do Candidato */}
+                    <div className="p-4 bg-gray-50/80 dark:bg-gray-800/60 rounded-xl border border-gray-100 dark:border-gray-700">
+                      <span className="text-[10px] font-bold uppercase text-gray-400 block flex items-center gap-1">
+                        <Home className="h-3 w-3 text-red-600" /> Residência do Candidato
+                      </span>
+                      <span className="text-xs font-bold text-gray-800 dark:text-white block mt-0.5 uppercase">
+                        {selectedResume.cidade_residencia || selectedResume.candidato_cidade || 'Não informada'}
+                      </span>
+                      <span className="text-[10px] text-gray-400 block mt-1">Cidade onde o candidato mora</span>
+                    </div>
+
+                    {/* Unidade Pretendida */}
+                    <div className="p-4 bg-gray-50/80 dark:bg-gray-800/60 rounded-xl border border-gray-100 dark:border-gray-700">
+                      <span className="text-[10px] font-bold uppercase text-gray-400 block flex items-center gap-1">
+                        <Building2 className="h-3 w-3 text-red-600" /> Unidade Pretendida
+                      </span>
+                      <span className="text-xs font-bold text-gray-800 dark:text-white block mt-0.5 truncate" title={selectedResume.unidade_pretendida || 'Banco de Talentos Corporativo'}>
+                        {selectedResume.unidade_pretendida || selectedResume.loja_nome || 'Banco de Talentos Corporativo'}
+                      </span>
+                      <span className="text-[10px] text-gray-400 block mt-1">
+                        {selectedResume.loja_cidade ? `Localizada em ${selectedResume.loja_cidade}${selectedResume.loja_estado ? ' - ' + selectedResume.loja_estado : ''}` : 'Candidatura Geral / Corporativo'}
+                      </span>
+                    </div>
+
+                    <div className="p-4 bg-gray-50/80 dark:bg-gray-800/60 rounded-xl border border-gray-100 dark:border-gray-700">
+                      <span className="text-[10px] font-bold uppercase text-gray-400 block">WhatsApp / Telefone</span>
+                      <span className="text-xs font-bold text-gray-800 dark:text-white block mt-0.5">{selectedResume.telefone || 'Não informado'}</span>
+                      {whatsappUrl && (
+                        <a 
+                          href={whatsappUrl} 
+                          target="_blank" 
+                          rel="noopener noreferrer"
+                          className="mt-2 inline-flex items-center gap-1.5 text-[11px] font-bold text-green-600 hover:text-green-700 dark:text-green-400"
+                        >
+                          <MessageCircle className="h-3.5 w-3.5" /> Abrir no WhatsApp
+                        </a>
+                      )}
+                    </div>
+
+                    <div className="p-4 bg-gray-50/80 dark:bg-gray-800/60 rounded-xl border border-gray-100 dark:border-gray-700">
+                      <span className="text-[10px] font-bold uppercase text-gray-400 block">E-mail</span>
+                      <span className="text-xs font-bold text-gray-800 dark:text-white block mt-0.5 truncate">{selectedResume.email}</span>
+                      <a 
+                        href={`mailto:${selectedResume.email}?subject=${encodeURIComponent(`Contato Gigante Pneus - Vaga ${selectedResume.vaga_interesse}`)}`}
+                        className="mt-2 inline-flex items-center gap-1.5 text-[11px] font-bold text-red-600 hover:text-red-700"
+                      >
+                        <ExternalLink className="h-3.5 w-3.5" /> Enviar E-mail
+                      </a>
+                    </div>
+
+                    <div className="p-4 bg-gray-50/80 dark:bg-gray-800/60 rounded-xl border border-gray-100 dark:border-gray-700">
+                      <span className="text-[10px] font-bold uppercase text-gray-400 block">CPF Protegido</span>
+                      <span className="text-xs font-mono font-bold text-gray-800 dark:text-white block mt-0.5">{selectedResume.cpf_mascarado || '***.***.***-**'}</span>
+                      <span className="text-[10px] text-gray-400 block mt-1">Conformidade LGPD</span>
+                    </div>
+
+                    <div className="p-4 bg-gray-50/80 dark:bg-gray-800/60 rounded-xl border border-gray-100 dark:border-gray-700">
+                      <span className="text-[10px] font-bold uppercase text-gray-400 block">Escolaridade</span>
+                      <span className="text-xs font-bold text-gray-800 dark:text-white block mt-0.5">{selectedResume.escolaridade || 'Não informada'}</span>
+                    </div>
+
+                    <div className="p-4 bg-gray-50/80 dark:bg-gray-800/60 rounded-xl border border-gray-100 dark:border-gray-700">
+                      <span className="text-[10px] font-bold uppercase text-gray-400 block">Rede Profissional</span>
+                      {selectedResume.linkedin_url ? (
+                        <a 
+                          href={selectedResume.linkedin_url} 
+                          target="_blank" 
+                          rel="noopener noreferrer"
+                          className="text-xs font-bold text-blue-600 hover:underline flex items-center gap-1 mt-0.5 truncate"
+                        >
+                          <ExternalLink className="h-3 w-3" /> Ver LinkedIn
+                        </a>
+                      ) : (
+                        <span className="text-xs text-gray-400 block mt-0.5">Não informado</span>
+                      )}
+                    </div>
+
+                    <div className="p-4 bg-gray-50/80 dark:bg-gray-800/60 rounded-xl border border-gray-100 dark:border-gray-700">
+                      <span className="text-[10px] font-bold uppercase text-gray-400 block">Outras Vagas da Rede</span>
+                      <span className="text-xs font-bold text-gray-800 dark:text-white block mt-0.5">
+                        {selectedResume.aceita_outras_vagas ? '✓ Sim, aceita consideração' : 'Apenas esta vaga'}
+                      </span>
+                    </div>
+                  </div>
+                </div>
+
+              </div>
+
+              {/* Rodapé do Modal */}
+              <div className="p-6 border-t border-gray-100 dark:border-gray-800 bg-gray-50/50 dark:bg-gray-800/50 flex justify-end">
+                <button 
+                  onClick={() => setSelectedResume(null)}
+                  className="bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-700 text-gray-700 dark:text-gray-300 px-8 py-3.5 rounded-2xl font-black uppercase text-xs hover:bg-gray-100 dark:hover:bg-gray-700 transition-all shadow-sm"
+                >
+                  Fechar Dossiê
                 </button>
               </div>
             </div>
-
-            <div className="p-8 border-t border-gray-100 dark:border-gray-800 bg-gray-50/50 dark:bg-gray-800/50">
-              <button 
-                onClick={() => setSelectedResume(null)}
-                className="w-full bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-700 text-gray-700 dark:text-gray-300 py-4 rounded-2xl font-black uppercase text-sm hover:bg-gray-100 dark:hover:bg-gray-700 transition-all shadow-sm"
-              >
-                Fechar Painel
-              </button>
-            </div>
           </div>
-        </div>
-      )}
+        );
+      })()}
     </div>
   );
 };

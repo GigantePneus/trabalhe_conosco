@@ -53,9 +53,16 @@ const App: React.FC = () => {
       const isRecovery = 
         pathname === '/reset-password' ||
         pathname.startsWith('/reset-password') ||
+        pathname === '/definir-senha' ||
+        pathname.startsWith('/definir-senha') ||
+        pathname === '/redefinir-senha' ||
+        pathname.startsWith('/redefinir-senha') ||
         searchParams.get('type') === 'recovery' ||
         hashParams.get('type') === 'recovery' ||
-        fullUrl.includes('type=recovery');
+        searchParams.get('type') === 'invite' ||
+        hashParams.get('type') === 'invite' ||
+        fullUrl.includes('type=recovery') ||
+        fullUrl.includes('type=invite');
 
       if (isRecovery) {
         setIsPasswordRecoveryMode(true);
@@ -77,12 +84,23 @@ const App: React.FC = () => {
           await supabase.auth.exchangeCodeForSession(code);
         }
 
-        // Se o pathname não for a raiz, normaliza a rota no HashRouter para #/reset-password
-        if (window.location.hash !== '#/reset-password') {
+        // Se o pathname não for a rota esperada, normaliza a rota no HashRouter para #/reset-password
+        if (window.location.hash !== '#/reset-password' && window.location.hash !== '#/definir-senha') {
           window.location.hash = '#/reset-password';
         }
-      } else if (sessionStorage.getItem('gigante_recovery_mode') === 'true') {
-        setIsPasswordRecoveryMode(true);
+      } else {
+        if (sessionStorage.getItem('gigante_recovery_mode') === 'true') {
+          setIsPasswordRecoveryMode(true);
+        } else if (
+          pathname === '/reset-password' ||
+          pathname.startsWith('/reset-password') ||
+          pathname === '/definir-senha' ||
+          pathname.startsWith('/definir-senha')
+        ) {
+          // Limpa pathname residual quando o usuário já concluiu o fluxo de definição de senha
+          const targetHash = window.location.hash || '#/admin';
+          window.history.replaceState(null, '', `/${targetHash}`);
+        }
       }
     };
 
@@ -195,13 +213,17 @@ const App: React.FC = () => {
             <Route path="/cadastro" element={<PublicForm />} />
             <Route path="/pesquisa/:id" element={<PublicSurvey />} />
             <Route path="/admin/google-connect" element={<GoogleConnectAdmin />} />
-            {/* Suporte simultâneo a /reset-password e /redefinir-senha */}
+            {/* Suporte simultâneo a /reset-password, /redefinir-senha e /definir-senha (convite) */}
             <Route 
               path="/reset-password" 
               element={<ResetPassword onSuccess={() => setIsPasswordRecoveryMode(false)} />} 
             />
             <Route 
               path="/redefinir-senha" 
+              element={<ResetPassword onSuccess={() => setIsPasswordRecoveryMode(false)} />} 
+            />
+            <Route 
+              path="/definir-senha" 
               element={<ResetPassword onSuccess={() => setIsPasswordRecoveryMode(false)} />} 
             />
             <Route 

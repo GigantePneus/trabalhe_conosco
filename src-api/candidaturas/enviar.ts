@@ -35,12 +35,28 @@ export interface CandidaturaPayload {
   aceita_outras_vagas?: boolean;
   consentimento_lgpd: boolean;
   vagas?: VagaItemPayload[];
+  // Apresentação pessoal obrigatória (80 - 2000 caracteres)
+  apresentacao_pessoal?: string;
+  // Experiência profissional estruturada
+  experiencia_profissional?: {
+    tipo_experiencia?: 'com_experiencia' | 'primeiro_emprego';
+    primeiro_emprego?: boolean;
+    ultima_empresa?: string;
+    cargo_funcao?: string;
+    area_atuacao?: string;
+    tempo_experiencia?: string;
+    principais_atividades?: string;
+    habilidades?: string[];
+    disponibilidade_inicio?: string;
+    observacoes?: string;
+  };
   // Campos de retrocompatibilidade para submissão de vaga única
   cargo_id?: string | null;
   loja_id?: string | null;
   vaga_interesse?: string;
   resumo?: string;
-  arquivo: {
+  // Arquivo de currículo (OPCIONAL na V1 Definitiva)
+  arquivo?: {
     nome: string;
     base64: string;
     mimeType?: string;
@@ -54,7 +70,8 @@ export interface CandidaturaResponse {
   protocolo?: string;
   candidatura_id?: string;
   candidato_id?: string;
-  curriculo_id?: string;
+  curriculo_id?: string | null;
+  possui_curriculo_anexado?: boolean;
   candidaturas_criadas?: number;
   vagas_duplicadas_ignoradas?: string[];
   status?: string;
@@ -238,44 +255,64 @@ export async function handleCandidatura(
       };
     }
 
-    // 5. Validação do Arquivo de Currículo (Limite 10 MB e formato)
-    if (!payload.arquivo || !payload.arquivo.base64 || !payload.arquivo.nome) {
-      return {
-        statusCode: 400,
-        data: { success: false, mensagem: 'O arquivo de currículo (.pdf, .doc ou .docx) é obrigatório.' }
-      };
-    }
-
-    let fileBuffer: Buffer;
-    try {
-      fileBuffer = Buffer.from(payload.arquivo.base64, 'base64');
-    } catch {
-      return {
-        statusCode: 400,
-        data: { success: false, mensagem: 'Codificação de arquivo inválida. O arquivo deve estar em Base64.' }
-      };
-    }
-
-    const validationResult = validateCurriculoFile(
-      fileBuffer,
-      payload.arquivo.nome,
-      payload.arquivo.mimeType
-    );
-
-    if (!validationResult.valid) {
+    // 5. Validação da Apresentação Pessoal ("Conte um pouco sobre você") - Obrigatória na V1
+    const apresentacaoPessoal = sanitizeString(payload.apresentacao_pessoal || payload.resumo);
+    if (!apresentacaoPessoal || apresentacaoPessoal.length < 80) {
       return {
         statusCode: 400,
         data: {
           success: false,
-          mensagem: validationResult.error || 'Arquivo inválido.'
+          mensagem: 'A apresentação pessoal ("Conte um pouco sobre você") é obrigatória e deve ter no mínimo 80 caracteres.'
+        }
+      };
+    }
+    if (apresentacaoPessoal.length > 2000) {
+      return {
+        statusCode: 400,
+        data: {
+          success: false,
+          mensagem: 'A apresentação pessoal não pode exceder 2.000 caracteres.'
         }
       };
     }
 
-    // 6. Geração do Protocolo Único
+    // 6. Validação do Arquivo de Currículo (OPCIONAL na V1 Definitiva)
+    let fileBuffer: Buffer | null = null;
+    let detectedMimeType: string | null = null;
+    const hasArquivo = Boolean(payload.arquivo && payload.arquivo.base64 && payload.arquivo.nome);
+
+    if (hasArquivo && payload.arquivo) {
+      try {
+        fileBuffer = Buffer.from(payload.arquivo.base64, 'base64');
+      } catch {
+        return {
+          statusCode: 400,
+          data: { success: false, mensagem: 'Codificação de arquivo inválida. O arquivo deve estar em Base64.' }
+        };
+      }
+
+      const validationResult = validateCurriculoFile(
+        fileBuffer,
+        payload.arquivo.nome,
+        payload.arquivo.mimeType
+      );
+
+      if (!validationResult.valid) {
+        return {
+          statusCode: 400,
+          data: {
+            success: false,
+            mensagem: validationResult.error || 'Arquivo de currículo inválido.'
+          }
+        };
+      }
+      detectedMimeType = validationResult.detectedMimeType || 'application/pdf';
+    }
+
+    // 7. Geração do Protocolo Único
     const protocolo = gerarProtocoloCandidatura();
 
-    // 6.0. Verificação das credenciais administrativas do backend
+    // 7.0. Verificação das credenciais administrativas do backend
     const supabaseAdmin = getSupabaseAdmin();
     if (!supabaseAdmin) {
       return {
@@ -288,9 +325,7 @@ export async function handleCandidatura(
       };
     }
 
-    // 6.1. Verificação Prévia de Duplicidade Total no Backend (Sem Expor Consulta Pública)
-    // Evita upload desnecessário para o Google Drive quando o candidato já possuir inscrição ativa
-    // para todas as vagas solicitadas. Executado internamente com a chave administrativa segura.
+    // 7.1. Verificação Prévia de Duplicidade Total no Backend (Sem Expor Consulta Pública)
     const cargosEspecificosIds = vagasList
       .map(v => v.cargo_id)
       .filter((cid): cid is string => typeof cid === 'string' && cid.length > 0);
@@ -325,36 +360,37 @@ export async function handleCandidatura(
           }
         }
       } catch (dupCheckErr) {
-        // Fallback gracioso: caso a checagem prévia não responda, prossegue para o fluxo transacional padrão
         console.warn('[Backend] Verificação prévia de duplicidade contornada:', dupCheckErr);
       }
     }
 
-    // 7. Upload ÚNICO no Google Drive (Reaproveitado por todas as candidaturas selecionadas)
-    let driveUpload;
-    try {
-      driveUpload = await googleDriveStorage.uploadFile({
-        buffer: fileBuffer,
-        originalName: payload.arquivo.nome,
-        mimeType: validationResult.detectedMimeType || 'application/pdf',
-        lojaId: vagasList[0]?.loja_id || null,
-        simulateFailure: payload.arquivo.simulateFailure === true
-      });
-    } catch (driveErr: any) {
-      console.error('[Backend] Falha no armazenamento externo:', driveErr.message);
-      return {
-        statusCode: 502,
-        data: {
-          success: false,
-          mensagem: 'Falha temporária ao comunicar com o servidor de armazenamento seguro. Por favor, tente enviar novamente.',
-          detalhes: 'O upload para o repositório de arquivos falhou. Nenhum registro foi gravado no banco de dados.'
-        }
-      };
+    // 8. Upload ÚNICO no Google Drive (CONDICIONAL — Somente se arquivo foi fornecido)
+    let driveUpload: { fileId: string; folderId: string; fileName: string; mimeType: string; tamanhoBytes: number; md5Checksum: string } | null = null;
+    if (hasArquivo && fileBuffer && payload.arquivo) {
+      try {
+        driveUpload = await googleDriveStorage.uploadFile({
+          buffer: fileBuffer,
+          originalName: payload.arquivo.nome,
+          mimeType: detectedMimeType || 'application/pdf',
+          lojaId: vagasList[0]?.loja_id || null,
+          simulateFailure: payload.arquivo.simulateFailure === true
+        });
+      } catch (driveErr: any) {
+        console.error('[Backend] Falha no armazenamento externo:', driveErr.message);
+        return {
+          statusCode: 502,
+          data: {
+            success: false,
+            mensagem: 'Falha temporária ao comunicar com o servidor de armazenamento seguro. Por favor, tente enviar novamente.',
+            detalhes: 'O upload para o repositório de arquivos falhou. Nenhum registro foi gravado no banco de dados.'
+          }
+        };
+      }
     }
 
-    // 8. Execução Transacional Atômica no PostgreSQL (RPC registrar_candidatura_transacional v2.0)
+    // 9. Execução Transacional Atômica no PostgreSQL (RPC V2 - Banco de Talentos)
     const { data: rpcData, error: rpcError } = await supabaseAdmin.rpc(
-      'registrar_candidatura_transacional',
+      'registrar_candidatura_transacional_v2',
       {
         p_nome: nome,
         p_email: email,
@@ -363,42 +399,50 @@ export async function handleCandidatura(
         p_cpf_mascarado: cpfMascarado,
         p_cpf_criptografado: cpfCriptografado,
         p_telefone: telefone,
-        p_cidade: cidade,
-        p_estado: estado,
-        p_escolaridade: escolaridade,
-        p_linkedin_url: linkedinUrl,
+        p_cidade: cidade || null,
+        p_estado: estado || null,
+        p_escolaridade: escolaridade || null,
+        p_linkedin_url: linkedinUrl || null,
         p_aceita_outras_vagas: aceitaOutrasVagas,
         p_consentimento_lgpd: true,
         p_vagas: vagasList,
-        p_resumo: resumo,
-        p_google_drive_file_id: driveUpload.fileId,
-        p_google_drive_folder_id: driveUpload.folderId,
-        p_nome_arquivo: driveUpload.fileName,
-        p_mime_type: driveUpload.mimeType,
-        p_tamanho_bytes: driveUpload.tamanhoBytes,
-        p_md5_checksum: driveUpload.md5Checksum,
+        p_apresentacao_pessoal: apresentacaoPessoal,
+        p_experiencia_profissional: payload.experiencia_profissional || {},
+        p_google_drive_file_id: driveUpload?.fileId || null,
+        p_google_drive_folder_id: driveUpload?.folderId || null,
+        p_nome_arquivo: driveUpload?.fileName || null,
+        p_mime_type: driveUpload?.mimeType || null,
+        p_tamanho_bytes: driveUpload?.tamanhoBytes || null,
+        p_md5_checksum: driveUpload?.md5Checksum || null,
         p_protocolo: protocolo,
-        p_ip_origem: clientIp
+        p_ip_origem: clientIp || '127.0.0.1'
       }
     );
 
-    // 9. Mecanismo de Compensação (Rollback Saga) se a transação do banco falhar
+    // 10. Mecanismo de Compensação (Rollback Saga) se a transação do banco falhar
     if (rpcError) {
       console.error('[Backend] Erro na transação do banco:', rpcError.message);
-      // Exclui o arquivo enviado ao Google Drive para não deixar arquivos órfãos
-      try {
-        await googleDriveStorage.deleteFile(driveUpload.fileId);
-      } catch (compErr: any) {
-        await registrarFalhaCompensacaoPersistente(
-          driveUpload.fileId,
-          driveUpload.fileName,
-          protocolo,
-          compErr?.message || 'Erro desconhecido'
-        );
+      if (driveUpload?.fileId) {
+        try {
+          await googleDriveStorage.deleteFile(driveUpload.fileId);
+        } catch (compErr: any) {
+          await registrarFalhaCompensacaoPersistente(
+            driveUpload.fileId,
+            driveUpload.fileName,
+            protocolo,
+            compErr?.message || 'Erro desconhecido'
+          );
+        }
       }
 
       // Tratamento de erros de domínio da RPC
       const msg = rpcError.message || '';
+      if (msg.includes('APRESENTACAO_INSUFICIENTE')) {
+        return { statusCode: 400, data: { success: false, mensagem: 'A apresentação pessoal deve conter no mínimo 80 caracteres.' } };
+      }
+      if (msg.includes('APRESENTACAO_LONGA')) {
+        return { statusCode: 400, data: { success: false, mensagem: 'A apresentação pessoal não pode exceder 2.000 caracteres.' } };
+      }
       if (msg.includes('VAGA_INEXISTENTE')) {
         return { statusCode: 404, data: { success: false, mensagem: 'Uma das vagas selecionadas não foi encontrada.' } };
       }
@@ -422,18 +466,19 @@ export async function handleCandidatura(
       };
     }
 
-    // 10. Tratamento de Inscrição Duplicada Total detectada pela RPC
-    // Se a RPC identificou que todas as vagas já estavam inscritas, descarta o arquivo do Drive via compensação
+    // 11. Tratamento de Inscrição Duplicada Total detectada pela RPC
     if (rpcData?.status_processamento === 'todas_vagas_duplicadas') {
-      try {
-        await googleDriveStorage.deleteFile(driveUpload.fileId);
-      } catch (compErr: any) {
-        await registrarFalhaCompensacaoPersistente(
-          driveUpload.fileId,
-          driveUpload.fileName,
-          protocolo,
-          compErr?.message || 'Erro desconhecido'
-        );
+      if (driveUpload?.fileId) {
+        try {
+          await googleDriveStorage.deleteFile(driveUpload.fileId);
+        } catch (compErr: any) {
+          await registrarFalhaCompensacaoPersistente(
+            driveUpload.fileId,
+            driveUpload.fileName,
+            protocolo,
+            compErr?.message || 'Erro desconhecido'
+          );
+        }
       }
       return {
         statusCode: 409,
@@ -448,7 +493,7 @@ export async function handleCandidatura(
       };
     }
 
-    // 11. Resposta Diferenciada Genérica (Proteção contra enumeração de dados em caso de divergência cadastral)
+    // 12. Resposta Diferenciada Genérica (Proteção contra conflito de dados)
     if (rpcData?.status_processamento === 'recebido_para_analise') {
       return {
         statusCode: 200,
@@ -470,11 +515,14 @@ export async function handleCandidatura(
         status_processamento: 'efetivado',
         protocolo: rpcData?.protocolo || protocolo,
         candidato_id: rpcData?.candidato_id,
-        curriculo_id: rpcData?.curriculo_id,
+        curriculo_id: rpcData?.curriculo_id || null,
+        possui_curriculo_anexado: Boolean(rpcData?.curriculo_id || driveUpload?.fileId),
         candidaturas_criadas: rpcData?.candidaturas_criadas || vagasList.length,
         vagas_duplicadas_ignoradas: rpcData?.vagas_duplicadas_ignoradas || [],
         status: 'Recebido',
-        mensagem: 'Candidatura e currículo recebidos e vinculados com sucesso às vagas selecionadas.'
+        mensagem: driveUpload?.fileId
+          ? 'Candidatura e currículo recebidos e vinculados com sucesso às vagas selecionadas.'
+          : 'Candidatura com apresentação e histórico recebida com sucesso no Banco de Talentos.'
       }
     };
   } catch (err: any) {
@@ -539,7 +587,7 @@ export default async function vercelHandler(req: any, res: any) {
   } catch (criticalErr: any) {
     // Registro técnico seguro no servidor sem expor dados pessoais do candidato
     console.error('[VercelHandler][CriticalException]', criticalErr?.message || criticalErr);
-    
+
     // Retorno de JSON padronizado e amigável ao usuário
     return res.status(500).json({
       success: false,

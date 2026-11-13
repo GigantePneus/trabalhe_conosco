@@ -43,3 +43,9 @@ walkthrough.md
 task.md
 implementation_plan.md
 traefik.yaml
+
+# Data Backups & Dumps (PII Protection)
+backups/
+scripts/backups/
+*.backup.json
+*.dump.json
