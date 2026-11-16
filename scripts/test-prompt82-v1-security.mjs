@@ -125,7 +125,7 @@ test('4. RH Corporativo NÃO possui acesso a chaves API nem a treinamento de age
 
 // Teste 5: Auditoria estática de código de AdminDashboard.tsx
 test('5. AdminDashboard.tsx possui guardas explícitos isGestorMaster para sub-aba geral e IA', () => {
-  const code = readFileSync(join(rootDir, 'components', 'AdminDashboard.tsx'), 'utf-8');
+  const code = readFileSync(join(rootDir, 'components', 'AdminDashboard.tsx'), 'utf-8').replace(/\r\n/g, '\n');
   
   // Verifica se 'geral' está condicionado a isGestorMaster
   assert.ok(code.includes('{isGestorMaster && settingsSubTab === \'geral\' && ('), 'Sub-aba geral deve ter guarda isGestorMaster');

@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import { supabase } from '../supabase';
 import { Candidato, ConfigItem, JobLandingContent, KPIStats, Pesquisa, Pergunta, TipoPergunta } from '../types';
 import { 
@@ -8,7 +8,7 @@ import {
   Share2, ExternalLink, MessageCircle, Brain, Award, Zap, Check, AlertTriangle, ThumbsUp, ThumbsDown, RefreshCw,
   KeyRound, Lock, EyeOff, Shield, Folder,
   LayoutList, LayoutGrid, Search, PowerOff, RotateCcw, ChevronRight, Info,
-  UserCheck, Clock, FileCheck2, CheckCircle2, AlertCircle, PhoneCall
+  UserCheck, Clock, FileCheck2, CheckCircle2, AlertCircle, PhoneCall, UserX
 } from 'lucide-react';
 import { analyzeSurveyResponses, analyzeTalentCompatibility, listAvailableGeminiModels, AIAnalysisResult, TalentAnalysisResult, DEFAULT_PROMPT_SURVEYS, DEFAULT_PROMPT_TALENTS } from '../aiService';
 import { createDefaultJobLanding, parseJobLandingFromRequisitos, serializeJobLanding, toLines } from '../jobsService';
@@ -26,9 +26,10 @@ const AdminDashboard: React.FC = () => {
   const isGestorMaster = userRole === 'franqueadora_admin';
   const isFranqueadoOrGerente = userRole === 'franqueado' || userRole === 'gerente';
 
-  // Estado da Gestão de Acessos Multi-Lojas (Prompt 74)
+  // Estado da Gestão de Acessos Multi-Lojas (Prompt 74/87)
   const [adminUsersList, setAdminUsersList] = useState<any[]>([]);
   const [loadingAdminUsers, setLoadingAdminUsers] = useState(false);
+  const [adminUsersError, setAdminUsersError] = useState<string>('');
   const [userModalOpen, setUserModalOpen] = useState(false);
   const [editingUserId, setEditingUserId] = useState<string | null>(null);
   const [userFormNome, setUserFormNome] = useState('');
@@ -292,6 +293,93 @@ const AdminDashboard: React.FC = () => {
       setActiveTab('overview');
     }
   }, [isGestorMaster, activeTab]);
+
+  // Função resiliente para carregar a lista de usuários da rede (Prompt 87)
+  const carregarAdminUsuarios = useCallback(async () => {
+    if (!isGestorMaster) return;
+    setLoadingAdminUsers(true);
+    setAdminUsersError('');
+
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      const token = session?.access_token;
+
+      let apiSuccess = false;
+
+      // 1. Tenta carregar via API administrativa serverless
+      try {
+        const res = await fetch('/api/admin/usuarios', {
+          headers: token ? { Authorization: `Bearer ${token}` } : {}
+        });
+
+        if (res.status === 403) {
+          const errJson = await res.json().catch(() => ({}));
+          setAdminUsersError(errJson.mensagem || 'Acesso negado: apenas administradores corporativos podem gerenciar acessos.');
+          return;
+        }
+
+        if (res.ok) {
+          const json = await res.json();
+          if (json.success && Array.isArray(json.usuarios)) {
+            setAdminUsersList(json.usuarios);
+            apiSuccess = true;
+          }
+        }
+      } catch (fetchErr) {
+        console.warn('API /api/admin/usuarios indisponível, acionando fallback direto via Supabase Client:', fetchErr);
+      }
+
+      // 2. Se a API serverless falhou ou não retornou sucesso, executa fallback direto via Supabase RLS
+      if (!apiSuccess) {
+        const [perfisRes, ulRes, lojasRes] = await Promise.all([
+          supabase.from('perfis').select('id, nome, email, role, ativo, criado_em').order('nome', { ascending: true }),
+          supabase.from('usuario_lojas').select('user_id, loja_id'),
+          supabase.from('lojas').select('id, nome, cidade, estado')
+        ]);
+
+        if (perfisRes.error) {
+          throw new Error(perfisRes.error.message || 'Falha ao consultar perfis no Supabase.');
+        }
+
+        const lojasMap = new Map((lojasRes.data || []).map((l: any) => [l.id, l]));
+        const userLojasMap = new Map<string, any[]>();
+        if (ulRes.data) {
+          for (const item of ulRes.data) {
+            const loja = lojasMap.get(item.loja_id);
+            if (loja) {
+              const arr = userLojasMap.get(item.user_id) || [];
+              arr.push(loja);
+              userLojasMap.set(item.user_id, arr);
+            }
+          }
+        }
+
+        const mappedUsers = (perfisRes.data || []).map((p: any) => ({
+          id: p.id,
+          email: p.email,
+          nome: p.nome || 'Sem nome informado',
+          role: p.role,
+          ativo: p.ativo ?? true,
+          criado_em: p.criado_em,
+          lojas: userLojasMap.get(p.id) || []
+        }));
+
+        setAdminUsersList(mappedUsers);
+      }
+    } catch (err: any) {
+      console.error('Erro ao carregar usuários:', err);
+      setAdminUsersError(err.message || 'Falha na comunicação com o servidor. Verifique sua conexão e tente novamente.');
+    } finally {
+      setLoadingAdminUsers(false);
+    }
+  }, [isGestorMaster]);
+
+  // Carrega automaticamente a lista de usuários ao acessar a aba de Gestão de Acessos (Prompt 87)
+  useEffect(() => {
+    if (activeTab === 'acessos' && isGestorMaster) {
+      carregarAdminUsuarios();
+    }
+  }, [activeTab, isGestorMaster, carregarAdminUsuarios]);
 
   useEffect(() => {
     localStorage.setItem('gigante_ai_provider', aiProvider);
@@ -3816,23 +3904,9 @@ const AdminDashboard: React.FC = () => {
                     <Plus className="h-4 w-4" /> Novo Franqueado / Gerente
                   </button>
                   <button
-                    onClick={async () => {
-                      setLoadingAdminUsers(true);
-                      try {
-                        const { data: { session } } = await supabase.auth.getSession();
-                        const token = session?.access_token;
-                        const res = await fetch('/api/admin/usuarios', {
-                          headers: { Authorization: `Bearer ${token}` }
-                        });
-                        const json = await res.json();
-                        if (json.success) {
-                          setAdminUsersList(json.usuarios || []);
-                        }
-                      } finally {
-                        setLoadingAdminUsers(false);
-                      }
-                    }}
-                    className="inline-flex items-center gap-2 bg-gray-100 hover:bg-gray-200 dark:bg-gray-800 dark:hover:bg-gray-700 text-gray-700 dark:text-gray-200 px-4 py-3 rounded-2xl text-xs font-black uppercase transition-all"
+                    onClick={() => carregarAdminUsuarios()}
+                    disabled={loadingAdminUsers}
+                    className="inline-flex items-center gap-2 bg-gray-100 hover:bg-gray-200 dark:bg-gray-800 dark:hover:bg-gray-700 text-gray-700 dark:text-gray-200 px-4 py-3 rounded-2xl text-xs font-black uppercase transition-all disabled:opacity-50"
                   >
                     <RefreshCw className={`h-4 w-4 ${loadingAdminUsers ? 'animate-spin' : ''}`} /> Atualizar
                   </button>
@@ -3857,13 +3931,47 @@ const AdminDashboard: React.FC = () => {
                         <tr>
                           <td colSpan={5} className="py-12 text-center text-gray-400">
                             <Loader2 className="h-8 w-8 animate-spin mx-auto text-red-600 mb-2" />
-                            Carregando usuários e permissões...
+                            Carregando usuários e permissões de franquias...
+                          </td>
+                        </tr>
+                      ) : adminUsersError ? (
+                        <tr>
+                          <td colSpan={5} className="py-10 px-6 text-center">
+                            <div className="max-w-md mx-auto space-y-3 bg-red-50 dark:bg-red-950/30 border border-red-200 dark:border-red-900/40 rounded-2xl p-6">
+                              <div className="w-12 h-12 bg-red-100 dark:bg-red-900/40 rounded-full flex items-center justify-center mx-auto text-red-600">
+                                <AlertTriangle className="h-6 w-6" />
+                              </div>
+                              <div>
+                                <h4 className="font-black text-sm uppercase text-gray-900 dark:text-white">
+                                  {adminUsersError.includes('Acesso negado') ? 'Acesso Restrito' : 'Falha na Consulta de Usuários'}
+                                </h4>
+                                <p className="text-xs text-gray-600 dark:text-gray-400 mt-1">
+                                  {adminUsersError}
+                                </p>
+                              </div>
+                              <button
+                                onClick={() => carregarAdminUsuarios()}
+                                className="inline-flex items-center gap-1.5 bg-red-600 hover:bg-red-700 text-white px-4 py-2 rounded-xl text-xs font-black uppercase transition-all shadow-sm"
+                              >
+                                <RefreshCw className="h-3.5 w-3.5" /> Tentar novamente
+                              </button>
+                            </div>
                           </td>
                         </tr>
                       ) : adminUsersList.length === 0 ? (
                         <tr>
                           <td colSpan={5} className="py-12 text-center text-gray-400">
-                            Nenhum franqueado cadastrado ainda. Clique em "Novo Franqueado" para criar o primeiro acesso.
+                            <div className="max-w-md mx-auto space-y-2">
+                              <div className="w-12 h-12 bg-gray-100 dark:bg-gray-800 rounded-full flex items-center justify-center mx-auto text-gray-400">
+                                <UserX className="h-6 w-6" />
+                              </div>
+                              <p className="font-black text-sm text-gray-700 dark:text-gray-300">
+                                Nenhum franqueado ou gerente cadastrado no momento.
+                              </p>
+                              <p className="text-xs text-gray-400">
+                                Clique no botão <strong>"Novo Franqueado / Gerente"</strong> acima para criar o primeiro acesso institucional.
+                              </p>
+                            </div>
                           </td>
                         </tr>
                       ) : (
@@ -4146,13 +4254,7 @@ const AdminDashboard: React.FC = () => {
                               // Recarrega lista
                               setTimeout(async () => {
                                 setUserModalOpen(false);
-                                const reloadRes = await fetch('/api/admin/usuarios', {
-                                  headers: { Authorization: `Bearer ${token}` }
-                                });
-                                const reloadJson = await reloadRes.json();
-                                if (reloadJson.success) {
-                                  setAdminUsersList(reloadJson.usuarios || []);
-                                }
+                                carregarAdminUsuarios();
                               }, 1200);
                             } else {
                               setAdminUserFeedback({ text: json.mensagem || 'Falha ao salvar usuário', type: 'error' });

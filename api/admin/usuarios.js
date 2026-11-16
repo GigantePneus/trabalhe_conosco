@@ -3,7 +3,7 @@ import { createClient } from "@supabase/supabase-js";
 var supabaseAdminInstance = null;
 function getSupabaseAdmin() {
   if (supabaseAdminInstance) return supabaseAdminInstance;
-  const supaUrl = process.env.SUPABASE_INTERNAL_URL || process.env.VITE_SUPABASE_URL;
+  const supaUrl = process.env.SUPABASE_URL || process.env.SUPABASE_INTERNAL_URL || process.env.VITE_SUPABASE_URL || "https://hidayzojjztfyuefmknz.supabase.co";
   const supaServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
   if (!supaUrl || !supaServiceKey) {
     throw new Error("CONFIG_ERROR: SUPABASE_URL ou SUPABASE_SERVICE_ROLE_KEY ausente.");
