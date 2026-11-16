@@ -1448,8 +1448,8 @@ const AdminDashboard: React.FC = () => {
     <div className="flex flex-col md:flex-row min-h-[calc(100vh-145px)] bg-gray-50 dark:bg-gray-950">
       
       {/* Sidebar */}
-      <aside className="w-full md:w-72 bg-white dark:bg-gray-900 border-r border-gray-200 dark:border-gray-800 shadow-sm flex flex-col z-10">
-        <div className="p-6 border-b border-gray-100 dark:border-gray-800">
+      <aside className="w-full md:w-64 lg:w-72 bg-white dark:bg-gray-900 border-r border-gray-200 dark:border-gray-800 shadow-sm flex flex-col z-10 shrink-0">
+        <div className="p-5 sm:p-6 border-b border-gray-100 dark:border-gray-800">
           <p className="text-[10px] font-black text-gray-400 uppercase tracking-widest flex items-center gap-2 mb-1">
             <ShieldCheck className="h-3 w-3 text-red-600" /> Gigante Pneus
           </p>
@@ -1511,11 +1511,11 @@ const AdminDashboard: React.FC = () => {
       </aside>
 
       {/* Main Content Area */}
-      <main className="flex-1 p-6 md:p-10 overflow-y-auto">
-        <div className="max-w-7xl mx-auto">
+      <main className="flex-1 p-3.5 sm:p-5 md:p-6 lg:p-8 xl:p-10 overflow-y-auto min-w-0 w-full">
+        <div className="max-w-7xl mx-auto w-full">
           {/* Banner de Unidade Vinculada para Franqueado / Gerente */}
           {isFranqueadoOrGerente && (
-            <div className="mb-6 p-5 rounded-2xl bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-800 flex items-center justify-between gap-4">
+            <div className="mb-6 p-4 sm:p-5 rounded-2xl bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-800 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
               <div className="flex items-center gap-3">
                 <div className="p-2.5 bg-amber-500 text-white rounded-xl">
                   <Building2 className="h-5 w-5" />
@@ -1595,23 +1595,23 @@ const AdminDashboard: React.FC = () => {
           {activeTab === 'talents' && (
             <div className="space-y-6 animate-in slide-in-from-bottom-4 duration-500">
               
-              {/* Barra de Filtros Estruturada do Banco de Talentos (Prompt 65) */}
-              <div className="bg-white dark:bg-gray-900 p-6 rounded-[2rem] border border-gray-100 dark:border-gray-800 shadow-lg space-y-4">
-                <div className="flex flex-col md:flex-row items-center justify-between gap-4">
+              {/* Barra de Filtros Estruturada do Banco de Talentos (Prompt 65 / Responsividade Prompt 83) */}
+              <div className="bg-white dark:bg-gray-900 p-4 sm:p-5 md:p-6 rounded-2xl md:rounded-[2rem] border border-gray-100 dark:border-gray-800 shadow-lg space-y-4">
+                <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3">
                   {/* Busca textual por nome / CPF / e-mail / telefone */}
-                  <div className="relative w-full md:w-80">
+                  <div className="relative w-full sm:w-72 lg:w-80">
                     <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
                     <input
                       type="text"
                       placeholder="Buscar por nome, CPF ou e-mail..."
                       value={searchTerm}
                       onChange={e => setSearchTerm(e.target.value)}
-                      className="w-full pl-10 pr-4 py-2 bg-gray-50 dark:bg-gray-800 border-none rounded-xl text-xs font-bold text-gray-800 dark:text-gray-200 outline-none focus:ring-2 focus:ring-red-600 placeholder:text-gray-400"
+                      className="w-full pl-10 pr-9 py-2.5 bg-gray-50 dark:bg-gray-800 border-none rounded-xl text-xs font-bold text-gray-800 dark:text-gray-200 outline-none focus:ring-2 focus:ring-red-600 placeholder:text-gray-400"
                     />
                     {searchTerm && (
                       <button
                         onClick={() => setSearchTerm('')}
-                        className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600"
+                        className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600 p-1"
                         title="Limpar busca"
                       >
                         <X className="h-3.5 w-3.5" />
@@ -1620,14 +1620,14 @@ const AdminDashboard: React.FC = () => {
                   </div>
 
                   {/* Contador de resultados e Botão Limpar */}
-                  <div className="flex items-center gap-3 w-full md:w-auto justify-between md:justify-end">
-                    <span className="text-xs font-black uppercase text-gray-500 dark:text-gray-400">
+                  <div className="flex items-center gap-3 w-full sm:w-auto justify-between sm:justify-end">
+                    <span className="text-xs font-black uppercase text-gray-500 dark:text-gray-400 shrink-0">
                       {filteredCandidatos.length} {filteredCandidatos.length === 1 ? 'Candidatura' : 'Candidaturas'}
                     </span>
                     {hasActiveFilters && (
                       <button
                         onClick={clearAllFilters}
-                        className="text-[10px] bg-red-100 dark:bg-red-950/60 text-red-600 dark:text-red-400 px-3 py-1.5 rounded-xl uppercase font-black hover:bg-red-200 dark:hover:bg-red-900/50 transition-colors inline-flex items-center gap-1.5"
+                        className="text-[10px] bg-red-100 dark:bg-red-950/60 text-red-600 dark:text-red-400 px-3 py-1.5 rounded-xl uppercase font-black hover:bg-red-200 dark:hover:bg-red-900/50 transition-colors inline-flex items-center gap-1.5 shrink-0"
                       >
                         <X className="h-3 w-3" /> Limpar Filtros
                       </button>
@@ -1635,11 +1635,11 @@ const AdminDashboard: React.FC = () => {
                   </div>
                 </div>
 
-                {/* Dropdowns Estruturados */}
-                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3 pt-3 border-t border-gray-100 dark:border-gray-800">
+                {/* Dropdowns Estruturados Responsivos (1 col mobile, 2 tablet, 3 notebook, 5 desktop grande) */}
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5 gap-3 pt-3 border-t border-gray-100 dark:border-gray-800">
                   {/* Filtro 1: Unidade Franqueada (loja_id) */}
                   <select
-                    className="px-3.5 py-2 bg-gray-50 dark:bg-gray-800 border-none rounded-xl text-xs font-bold text-gray-700 dark:text-gray-300 outline-none focus:ring-2 focus:ring-red-600"
+                    className="w-full px-3.5 py-2.5 bg-gray-50 dark:bg-gray-800 border-none rounded-xl text-xs font-bold text-gray-700 dark:text-gray-300 outline-none focus:ring-2 focus:ring-red-600 truncate"
                     value={filterLojaId}
                     onChange={e => setFilterLojaId(e.target.value)}
                     disabled={isFranqueadoOrGerente && userAuthorizedLojas.length <= 1}
@@ -1675,7 +1675,7 @@ const AdminDashboard: React.FC = () => {
 
                   {/* Filtro 2: Cargo / Vaga (cargo_id estruturado) */}
                   <select
-                    className="px-3.5 py-2 bg-gray-50 dark:bg-gray-800 border-none rounded-xl text-xs font-bold text-gray-700 dark:text-gray-300 outline-none focus:ring-2 focus:ring-red-600"
+                    className="w-full px-3.5 py-2.5 bg-gray-50 dark:bg-gray-800 border-none rounded-xl text-xs font-bold text-gray-700 dark:text-gray-300 outline-none focus:ring-2 focus:ring-red-600 truncate"
                     value={filterCargoId}
                     onChange={e => setFilterCargoId(e.target.value)}
                   >
@@ -1690,7 +1690,7 @@ const AdminDashboard: React.FC = () => {
 
                   {/* Filtro 3: Status da Candidatura */}
                   <select
-                    className="px-3.5 py-2 bg-gray-50 dark:bg-gray-800 border-none rounded-xl text-xs font-bold text-gray-700 dark:text-gray-300 outline-none focus:ring-2 focus:ring-red-600"
+                    className="w-full px-3.5 py-2.5 bg-gray-50 dark:bg-gray-800 border-none rounded-xl text-xs font-bold text-gray-700 dark:text-gray-300 outline-none focus:ring-2 focus:ring-red-600 truncate"
                     value={filterStatus}
                     onChange={e => setFilterStatus(e.target.value)}
                   >
@@ -1706,7 +1706,7 @@ const AdminDashboard: React.FC = () => {
 
                   {/* Filtro 4: Cidade de Residência */}
                   <select
-                    className="px-3.5 py-2 bg-gray-50 dark:bg-gray-800 border-none rounded-xl text-xs font-bold text-gray-700 dark:text-gray-300 outline-none focus:ring-2 focus:ring-red-600"
+                    className="w-full px-3.5 py-2.5 bg-gray-50 dark:bg-gray-800 border-none rounded-xl text-xs font-bold text-gray-700 dark:text-gray-300 outline-none focus:ring-2 focus:ring-red-600 truncate"
                     value={filterCity}
                     onChange={e => setFilterCity(e.target.value)}
                     title="Filtrar por Cidade de Residência do Candidato"
@@ -1720,120 +1720,220 @@ const AdminDashboard: React.FC = () => {
                   </select>
 
                   {/* Filtro 5: Período de Submissão */}
-                  <div className="flex items-center gap-1.5">
+                  <div className="flex items-center gap-1.5 w-full min-w-0">
                     <input
                       type="date"
                       value={startDate}
                       onChange={e => setStartDate(e.target.value)}
                       title="Data Inicial"
-                      className="w-1/2 px-2.5 py-2 bg-gray-50 dark:bg-gray-800 rounded-xl border-none text-[11px] font-bold text-gray-600 dark:text-gray-300 outline-none focus:ring-2 focus:ring-red-600"
+                      className="w-1/2 min-w-0 px-2.5 py-2.5 bg-gray-50 dark:bg-gray-800 rounded-xl border-none text-[11px] font-bold text-gray-600 dark:text-gray-300 outline-none focus:ring-2 focus:ring-red-600"
                     />
-                    <span className="text-gray-400 font-bold uppercase text-[9px]">até</span>
+                    <span className="text-gray-400 font-bold uppercase text-[9px] shrink-0">até</span>
                     <input
                       type="date"
                       value={endDate}
                       onChange={e => setEndDate(e.target.value)}
                       title="Data Final"
-                      className="w-1/2 px-2.5 py-2 bg-gray-50 dark:bg-gray-800 rounded-xl border-none text-[11px] font-bold text-gray-600 dark:text-gray-300 outline-none focus:ring-2 focus:ring-red-600"
+                      className="w-1/2 min-w-0 px-2.5 py-2.5 bg-gray-50 dark:bg-gray-800 rounded-xl border-none text-[11px] font-bold text-gray-600 dark:text-gray-300 outline-none focus:ring-2 focus:ring-red-600"
                     />
                   </div>
                 </div>
               </div>
 
-              <div className="bg-white dark:bg-gray-900 rounded-[2.5rem] shadow-xl border border-gray-100 dark:border-gray-800 overflow-hidden">
-                <table className="w-full text-left">
-                  <thead className="bg-gray-50/50 dark:bg-gray-800/50 border-b dark:border-gray-700">
-                    <tr>
-                      <th className="px-6 py-5 text-[10px] font-black text-gray-400 dark:text-gray-500 uppercase tracking-widest">Candidato</th>
-                      <th className="px-6 py-5 text-[10px] font-black text-gray-400 dark:text-gray-500 uppercase tracking-widest">Contato</th>
-                      <th className="px-6 py-5 text-[10px] font-black text-gray-400 dark:text-gray-500 uppercase tracking-widest">Residência</th>
-                      <th className="px-6 py-5 text-[10px] font-black text-gray-400 dark:text-gray-500 uppercase tracking-widest">Unidade Pretendida</th>
-                      <th className="px-6 py-5 text-[10px] font-black text-gray-400 dark:text-gray-500 uppercase tracking-widest">Tipo de Cadastro</th>
-                      <th className="px-6 py-5 text-[10px] font-black text-gray-400 dark:text-gray-500 uppercase tracking-widest">Cadastro</th>
-                      <th className="px-6 py-5 text-[10px] font-black text-gray-400 dark:text-gray-500 uppercase tracking-widest text-right">Ação</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-gray-50 dark:divide-gray-800">
-                    {loading ? (
-                      <tr><td colSpan={7} className="py-20 text-center"><Loader2 className="h-8 w-8 animate-spin text-red-600 mx-auto" /></td></tr>
-                    ) : filteredCandidatos.length === 0 ? (
+              {/* Visualização em Tabela para Desktop (lg:) com rolagem horizontal contida */}
+              <div className="hidden lg:block bg-white dark:bg-gray-900 rounded-2xl lg:rounded-[2.5rem] shadow-xl border border-gray-100 dark:border-gray-800 overflow-hidden">
+                <div className="overflow-x-auto custom-scrollbar">
+                  <table className="w-full text-left min-w-[960px]">
+                    <thead className="bg-gray-50/50 dark:bg-gray-800/50 border-b dark:border-gray-700">
                       <tr>
-                        <td colSpan={7} className="py-16 text-center">
-                          <div className="max-w-md mx-auto space-y-3">
-                            <div className="w-12 h-12 rounded-2xl bg-gray-100 dark:bg-gray-800 text-gray-400 flex items-center justify-center mx-auto">
-                              <Search className="h-6 w-6" />
+                        <th className="px-5 py-4 text-[10px] font-black text-gray-400 dark:text-gray-500 uppercase tracking-widest min-w-[190px]">Candidato</th>
+                        <th className="px-5 py-4 text-[10px] font-black text-gray-400 dark:text-gray-500 uppercase tracking-widest min-w-[170px]">Contato</th>
+                        <th className="px-5 py-4 text-[10px] font-black text-gray-400 dark:text-gray-500 uppercase tracking-widest min-w-[140px]">Residência</th>
+                        <th className="px-5 py-4 text-[10px] font-black text-gray-400 dark:text-gray-500 uppercase tracking-widest min-w-[180px]">Unidade Pretendida</th>
+                        <th className="px-5 py-4 text-[10px] font-black text-gray-400 dark:text-gray-500 uppercase tracking-widest min-w-[140px]">Tipo de Cadastro</th>
+                        <th className="px-5 py-4 text-[10px] font-black text-gray-400 dark:text-gray-500 uppercase tracking-widest min-w-[100px]">Cadastro</th>
+                        <th className="px-5 py-4 text-[10px] font-black text-gray-400 dark:text-gray-500 uppercase tracking-widest text-right w-16">Ação</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-gray-50 dark:divide-gray-800">
+                      {loading ? (
+                        <tr><td colSpan={7} className="py-20 text-center"><Loader2 className="h-8 w-8 animate-spin text-red-600 mx-auto" /></td></tr>
+                      ) : filteredCandidatos.length === 0 ? (
+                        <tr>
+                          <td colSpan={7} className="py-16 text-center">
+                            <div className="max-w-md mx-auto space-y-3">
+                              <div className="w-12 h-12 rounded-2xl bg-gray-100 dark:bg-gray-800 text-gray-400 flex items-center justify-center mx-auto">
+                                <Search className="h-6 w-6" />
+                              </div>
+                              <h4 className="text-base font-bold text-gray-800 dark:text-gray-200">
+                                Nenhuma candidatura encontrada
+                              </h4>
+                              <p className="text-xs text-gray-500 dark:text-gray-400">
+                                Não encontramos registros para os critérios selecionados. Altere os filtros ou clique em limpar.
+                              </p>
+                              {hasActiveFilters && (
+                                <button
+                                  onClick={clearAllFilters}
+                                  className="inline-flex items-center gap-2 px-4 py-2 bg-red-50 dark:bg-red-950/40 text-red-600 dark:text-red-400 rounded-xl text-xs font-black uppercase tracking-wider hover:bg-red-100 dark:hover:bg-red-900/60 transition-colors"
+                                >
+                                  Limpar Todos os Filtros
+                                </button>
+                              )}
                             </div>
-                            <h4 className="text-base font-bold text-gray-800 dark:text-gray-200">
-                              Nenhuma candidatura encontrada
-                            </h4>
-                            <p className="text-xs text-gray-500 dark:text-gray-400">
-                              Não encontramos registros para os critérios selecionados. Altere os filtros ou clique em limpar.
-                            </p>
-                            {hasActiveFilters && (
-                              <button
-                                onClick={clearAllFilters}
-                                className="inline-flex items-center gap-2 px-4 py-2 bg-red-50 dark:bg-red-950/40 text-red-600 dark:text-red-400 rounded-xl text-xs font-black uppercase tracking-wider hover:bg-red-100 dark:hover:bg-red-900/60 transition-colors"
-                              >
-                                Limpar Todos os Filtros
-                              </button>
+                          </td>
+                        </tr>
+                      ) : filteredCandidatos.map(item => (
+                        <tr key={item.id} className="hover:bg-red-50/50 dark:hover:bg-red-900/10 transition-colors group">
+                          <td className="px-5 py-4">
+                            <div className="font-black text-gray-900 dark:text-white uppercase whitespace-nowrap">{item.nome}</div>
+                            <div className="text-[10px] text-gray-400 font-bold uppercase truncate max-w-[220px]" title={item.vaga_interesse}>{item.vaga_interesse}</div>
+                          </td>
+                          <td className="px-5 py-4 text-xs font-medium text-gray-600 dark:text-gray-300">
+                            <div className="truncate max-w-[180px]" title={item.email}>{item.email}</div>
+                            <div className="text-[10px] text-gray-400 whitespace-nowrap">{item.telefone}</div>
+                          </td>
+                          <td className="px-5 py-4 text-xs font-bold text-gray-700 dark:text-gray-300 uppercase whitespace-nowrap">
+                            <div className="flex items-center gap-1.5">
+                              <MapPin className="h-3.5 w-3.5 text-gray-400 shrink-0" />
+                              <span className="truncate max-w-[140px]" title={item.cidade_residencia || item.cidade || 'Não informada'}>{item.cidade_residencia || item.cidade || 'Não informada'}</span>
+                            </div>
+                          </td>
+                          <td className="px-5 py-4 text-xs font-bold text-gray-900 dark:text-white">
+                            <div className="flex items-center gap-1.5">
+                              <Building2 className="h-3.5 w-3.5 text-red-600 shrink-0" />
+                              <span className="truncate max-w-[180px]" title={item.unidade_pretendida || 'Banco de Talentos Corporativo'}>
+                                {item.unidade_pretendida || 'Banco de Talentos Corporativo'}
+                              </span>
+                            </div>
+                            {item.loja_cidade && (
+                              <div className="text-[10px] text-gray-400 font-semibold pl-5 truncate max-w-[180px]">
+                                {item.loja_cidade}{item.loja_estado ? ` - ${item.loja_estado}` : ''}
+                              </div>
                             )}
-                          </div>
-                        </td>
-                      </tr>
-                    ) : filteredCandidatos.map(item => (
-                      <tr key={item.id} className="hover:bg-red-50/50 dark:hover:bg-red-900/10 transition-colors group">
-                        <td className="px-6 py-5">
-                          <div className="font-black text-gray-900 dark:text-white uppercase">{item.nome}</div>
-                          <div className="text-[10px] text-gray-400 font-bold uppercase">{item.vaga_interesse}</div>
-                        </td>
-                        <td className="px-6 py-5 text-xs font-medium text-gray-600 dark:text-gray-300">
-                          <div>{item.email}</div>
-                          <div className="text-[10px] text-gray-400">{item.telefone}</div>
-                        </td>
-                        <td className="px-6 py-5 text-xs font-bold text-gray-700 dark:text-gray-300 uppercase">
-                          <div className="flex items-center gap-1.5">
-                            <MapPin className="h-3.5 w-3.5 text-gray-400 shrink-0" />
-                            <span>{item.cidade_residencia || item.cidade || 'Não informada'}</span>
-                          </div>
-                        </td>
-                        <td className="px-6 py-5 text-xs font-bold text-gray-900 dark:text-white">
-                          <div className="flex items-center gap-1.5">
-                            <Building2 className="h-3.5 w-3.5 text-red-600 shrink-0" />
-                            <span className="truncate max-w-[200px]" title={item.unidade_pretendida || 'Banco de Talentos Corporativo'}>
-                              {item.unidade_pretendida || 'Banco de Talentos Corporativo'}
-                            </span>
-                          </div>
-                          {item.loja_cidade && (
-                            <div className="text-[10px] text-gray-400 font-semibold pl-5">
-                              {item.loja_cidade}{item.loja_estado ? ` - ${item.loja_estado}` : ''}
-                            </div>
-                          )}
-                        </td>
-                        <td className="px-6 py-5">
-                          {item.possui_curriculo ? (
-                            <span className="inline-flex items-center gap-1.5 bg-green-50 dark:bg-green-950/40 text-green-700 dark:text-green-300 px-3 py-1 rounded-full text-[10px] font-black uppercase tracking-wider border border-green-200 dark:border-green-900/50">
-                              <FileCheck2 className="h-3 w-3" /> Currículo Anexo
-                            </span>
-                          ) : (
-                            <span className="inline-flex items-center gap-1.5 bg-blue-50 dark:bg-blue-950/40 text-blue-700 dark:text-blue-300 px-3 py-1 rounded-full text-[10px] font-black uppercase tracking-wider border border-blue-200 dark:border-blue-900/50">
-                              <UserCheck className="h-3 w-3" /> Ficha Profissional
-                            </span>
-                          )}
-                        </td>
-                        <td className="px-6 py-5 text-[11px] font-bold text-gray-400 uppercase">{new Date(item.created_at).toLocaleDateString('pt-BR')}</td>
-                        <td className="px-6 py-5 text-right">
-                          <button 
-                            onClick={() => setSelectedResume(item)} 
-                            className="bg-red-600 text-white p-2.5 rounded-xl hover:bg-red-700 transition-all shadow-md active:scale-90"
-                            title="Ver Dossiê Profissional Completo"
-                          >
-                            <Eye className="h-4 w-4" />
-                          </button>
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
+                          </td>
+                          <td className="px-5 py-4 whitespace-nowrap">
+                            {item.possui_curriculo ? (
+                              <span className="inline-flex items-center gap-1.5 bg-green-50 dark:bg-green-950/40 text-green-700 dark:text-green-300 px-3 py-1 rounded-full text-[10px] font-black uppercase tracking-wider border border-green-200 dark:border-green-900/50">
+                                <FileCheck2 className="h-3 w-3" /> Currículo Anexo
+                              </span>
+                            ) : (
+                              <span className="inline-flex items-center gap-1.5 bg-blue-50 dark:bg-blue-950/40 text-blue-700 dark:text-blue-300 px-3 py-1 rounded-full text-[10px] font-black uppercase tracking-wider border border-blue-200 dark:border-blue-900/50">
+                                <UserCheck className="h-3 w-3" /> Ficha Profissional
+                              </span>
+                            )}
+                          </td>
+                          <td className="px-5 py-4 text-[11px] font-bold text-gray-400 uppercase whitespace-nowrap">
+                            {new Date(item.created_at).toLocaleDateString('pt-BR')}
+                          </td>
+                          <td className="px-5 py-4 text-right whitespace-nowrap">
+                            <button 
+                              onClick={() => setSelectedResume(item)} 
+                              className="bg-red-600 text-white p-2.5 rounded-xl hover:bg-red-700 transition-all shadow-md active:scale-90"
+                              title="Ver Dossiê Profissional Completo"
+                            >
+                              <Eye className="h-4 w-4" />
+                            </button>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+
+              {/* Visualização em Cartões Responsivos (Mobile e Tablets < lg) */}
+              <div className="block lg:hidden space-y-3.5">
+                {loading ? (
+                  <div className="bg-white dark:bg-gray-900 p-12 rounded-2xl border border-gray-100 dark:border-gray-800 shadow-sm text-center">
+                    <Loader2 className="h-8 w-8 animate-spin text-red-600 mx-auto" />
+                  </div>
+                ) : filteredCandidatos.length === 0 ? (
+                  <div className="bg-white dark:bg-gray-900 p-8 rounded-2xl border border-gray-100 dark:border-gray-800 shadow-sm text-center space-y-3">
+                    <div className="w-12 h-12 rounded-2xl bg-gray-100 dark:bg-gray-800 text-gray-400 flex items-center justify-center mx-auto">
+                      <Search className="h-6 w-6" />
+                    </div>
+                    <h4 className="text-sm font-bold text-gray-800 dark:text-gray-200">
+                      Nenhuma candidatura encontrada
+                    </h4>
+                    <p className="text-xs text-gray-500 dark:text-gray-400">
+                      Altere os filtros ou clique em limpar.
+                    </p>
+                    {hasActiveFilters && (
+                      <button
+                        onClick={clearAllFilters}
+                        className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-red-50 dark:bg-red-950/40 text-red-600 dark:text-red-400 rounded-xl text-xs font-black uppercase tracking-wider hover:bg-red-100"
+                      >
+                        Limpar Filtros
+                      </button>
+                    )}
+                  </div>
+                ) : (
+                  filteredCandidatos.map(item => (
+                    <div 
+                      key={item.id} 
+                      className="bg-white dark:bg-gray-900 p-4 sm:p-5 rounded-2xl border border-gray-100 dark:border-gray-800 shadow-md space-y-3"
+                    >
+                      {/* Cabeçalho do Cartão: Nome, Cargo e Ação Dossiê */}
+                      <div className="flex items-start justify-between gap-3">
+                        <div className="min-w-0 flex-1">
+                          <h4 className="font-black text-sm sm:text-base text-gray-900 dark:text-white uppercase truncate">
+                            {item.nome}
+                          </h4>
+                          <p className="text-xs font-bold text-red-600 dark:text-red-400 uppercase mt-0.5 truncate">
+                            {item.vaga_interesse}
+                          </p>
+                        </div>
+                        <button
+                          onClick={() => setSelectedResume(item)}
+                          className="bg-red-600 hover:bg-red-700 text-white px-3 py-2 rounded-xl transition-all shadow-md active:scale-95 shrink-0 flex items-center gap-1.5 text-xs font-black uppercase tracking-wider"
+                          title="Abrir Dossiê Profissional"
+                        >
+                          <Eye className="h-3.5 w-3.5" />
+                          <span>Dossiê</span>
+                        </button>
+                      </div>
+
+                      {/* Badges: Tipo de Cadastro & Data */}
+                      <div className="flex flex-wrap items-center justify-between gap-2 pt-2 border-t border-gray-100 dark:border-gray-800/80 text-[11px]">
+                        {item.possui_curriculo ? (
+                          <span className="inline-flex items-center gap-1.5 bg-green-50 dark:bg-green-950/40 text-green-700 dark:text-green-300 px-2.5 py-0.5 rounded-full font-bold uppercase text-[10px] border border-green-200 dark:border-green-900/50">
+                            <FileCheck2 className="h-3 w-3" /> Currículo Anexo
+                          </span>
+                        ) : (
+                          <span className="inline-flex items-center gap-1.5 bg-blue-50 dark:bg-blue-950/40 text-blue-700 dark:text-blue-300 px-2.5 py-0.5 rounded-full font-bold uppercase text-[10px] border border-blue-200 dark:border-blue-900/50">
+                            <UserCheck className="h-3 w-3" /> Ficha Profissional
+                          </span>
+                        )}
+                        <span className="text-[10px] font-bold text-gray-400 uppercase">
+                          {new Date(item.created_at).toLocaleDateString('pt-BR')}
+                        </span>
+                      </div>
+
+                      {/* Detalhes: Residência, Unidade e Contatos */}
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-xs bg-gray-50/80 dark:bg-gray-800/60 p-3 rounded-xl border border-gray-100 dark:border-gray-700/50">
+                        <div className="flex items-center gap-2 min-w-0">
+                          <MapPin className="h-3.5 w-3.5 text-gray-400 shrink-0" />
+                          <span className="truncate">
+                            Reside: <strong className="text-gray-800 dark:text-white uppercase">{item.cidade_residencia || item.cidade || 'Não informada'}</strong>
+                          </span>
+                        </div>
+                        <div className="flex items-center gap-2 min-w-0">
+                          <Building2 className="h-3.5 w-3.5 text-red-600 shrink-0" />
+                          <span className="truncate" title={item.unidade_pretendida || 'Banco de Talentos Corporativo'}>
+                            Unidade: <strong className="text-gray-800 dark:text-white">{item.unidade_pretendida || 'Corporativo'}</strong>
+                          </span>
+                        </div>
+                        <div className="flex items-center gap-2 min-w-0">
+                          <PhoneCall className="h-3.5 w-3.5 text-gray-400 shrink-0" />
+                          <span className="font-mono">{item.telefone}</span>
+                        </div>
+                        <div className="flex items-center gap-2 min-w-0">
+                          <span className="text-[11px] font-bold text-gray-400 truncate" title={item.email}>{item.email}</span>
+                        </div>
+                      </div>
+                    </div>
+                  ))
+                )}
               </div>
             </div>
           )}
@@ -4436,12 +4536,12 @@ const AdminDashboard: React.FC = () => {
         const hasCurriculoAnexo = Boolean(selectedResume.possui_curriculo || selectedResume.curriculo_id || selectedResume.curriculo_file_id);
 
         return (
-          <div className="fixed inset-0 z-[60] flex items-center justify-center p-4 bg-black/80 backdrop-blur-xl animate-in fade-in duration-300">
-            <div className="bg-white dark:bg-gray-900 rounded-[3rem] w-full max-w-3xl max-h-[92vh] overflow-hidden flex flex-col shadow-2xl border border-gray-100 dark:border-gray-800">
+          <div className="fixed inset-0 z-[60] flex items-center justify-center p-2 sm:p-4 md:p-6 bg-black/80 backdrop-blur-xl animate-in fade-in duration-300">
+            <div className="bg-white dark:bg-gray-900 rounded-2xl sm:rounded-[2.5rem] md:rounded-[3rem] w-full max-w-4xl max-h-[94vh] overflow-hidden flex flex-col shadow-2xl border border-gray-100 dark:border-gray-800">
               
               {/* Top Bar do Modal */}
-              <div className="px-8 py-5 border-b border-gray-100 dark:border-gray-800 flex items-center justify-between bg-gray-50/50 dark:bg-gray-800/50">
-                <div className="flex items-center gap-3">
+              <div className="px-5 sm:px-8 py-4 sm:py-5 border-b border-gray-100 dark:border-gray-800 flex items-center justify-between bg-gray-50/50 dark:bg-gray-800/50 shrink-0">
+                <div className="flex items-center gap-2 sm:gap-3 flex-wrap">
                   <span className="bg-red-600 text-white text-[10px] font-black uppercase tracking-widest px-3 py-1 rounded-full">
                     Dossiê do Candidato
                   </span>
@@ -4453,25 +4553,26 @@ const AdminDashboard: React.FC = () => {
                 </div>
                 <button 
                   onClick={() => setSelectedResume(null)} 
-                  className="p-2 hover:bg-red-100 dark:hover:bg-red-900/30 text-red-600 rounded-full transition-colors"
+                  className="p-2 hover:bg-red-100 dark:hover:bg-red-900/30 text-red-600 rounded-full transition-colors shrink-0"
+                  title="Fechar"
                 >
-                  <X className="h-6 w-6" />
+                  <X className="h-5 w-5 sm:h-6 sm:w-6" />
                 </button>
               </div>
               
               {/* Conteúdo com rolagem do Dossiê */}
-              <div className="p-8 md:p-10 overflow-y-auto flex-grow space-y-8">
+              <div className="p-4 sm:p-6 md:p-8 lg:p-10 overflow-y-auto flex-grow space-y-6 sm:space-y-8 custom-scrollbar">
                 
                 {/* Cabeçalho do Perfil com Avatar de Iniciais */}
-                <div className="flex flex-col sm:flex-row items-start sm:items-center gap-6 pb-6 border-b border-gray-100 dark:border-gray-800">
-                  <div className="w-20 h-20 rounded-2xl bg-gradient-to-tr from-red-600 to-red-500 text-white flex items-center justify-center font-black text-2xl shadow-lg shrink-0">
+                <div className="flex flex-col sm:flex-row items-start sm:items-center gap-4 sm:gap-6 pb-6 border-b border-gray-100 dark:border-gray-800">
+                  <div className="w-14 h-14 sm:w-16 sm:h-16 md:w-20 md:h-20 rounded-2xl bg-gradient-to-tr from-red-600 to-red-500 text-white flex items-center justify-center font-black text-lg sm:text-xl md:text-2xl shadow-lg shrink-0">
                     {initials}
                   </div>
-                  <div className="min-w-0 flex-1">
-                    <h2 className="text-2xl md:text-3xl font-black text-gray-900 dark:text-white uppercase tracking-tight leading-tight">
+                  <div className="min-w-0 flex-1 w-full">
+                    <h2 className="text-xl sm:text-2xl md:text-3xl font-black text-gray-900 dark:text-white uppercase tracking-tight leading-tight break-words">
                       {selectedResume.nome}
                     </h2>
-                    <div className="flex flex-wrap items-center gap-2 mt-2">
+                    <div className="flex flex-wrap items-center gap-1.5 sm:gap-2 mt-2">
                       <span className="inline-flex items-center gap-1 bg-red-600 text-white text-[11px] font-bold px-3 py-1 rounded-xl tracking-wide">
                         <Briefcase className="h-3.5 w-3.5" /> {selectedResume.vaga_interesse}
                       </span>
@@ -4503,7 +4604,7 @@ const AdminDashboard: React.FC = () => {
                   </div>
                   
                   {hasApresentacao ? (
-                    <div className="p-5 bg-gray-50/80 dark:bg-gray-800/60 rounded-2xl border border-gray-100 dark:border-gray-700">
+                    <div className="p-4 sm:p-5 bg-gray-50/80 dark:bg-gray-800/60 rounded-2xl border border-gray-100 dark:border-gray-700 break-words">
                       <p className="text-sm text-gray-800 dark:text-gray-200 whitespace-pre-wrap leading-relaxed">
                         {apresentacaoTexto}
                       </p>
@@ -4520,9 +4621,9 @@ const AdminDashboard: React.FC = () => {
                     Experiência Profissional & Habilidades
                   </h3>
 
-                  <div className="p-5 bg-gray-50/80 dark:bg-gray-800/60 rounded-2xl border border-gray-100 dark:border-gray-700 space-y-4">
+                  <div className="p-4 sm:p-5 bg-gray-50/80 dark:bg-gray-800/60 rounded-2xl border border-gray-100 dark:border-gray-700 space-y-4">
                     {/* Badge do perfil de experiência */}
-                    <div className="flex items-center gap-2">
+                    <div className="flex flex-wrap items-center gap-2">
                       {isPrimeiroEmprego ? (
                         <span className="inline-flex items-center gap-1.5 bg-amber-100 dark:bg-amber-900/40 text-amber-800 dark:text-amber-300 text-xs font-bold px-3 py-1 rounded-full">
                           <Award className="h-3.5 w-3.5" /> Busca Primeiro Emprego (Sem experiência anterior em carteira)
@@ -4544,15 +4645,15 @@ const AdminDashboard: React.FC = () => {
                       <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-3 pt-2 border-t border-gray-200/60 dark:border-gray-700/60 text-xs">
                         <div>
                           <span className="text-[10px] font-bold uppercase text-gray-400 block">Último Cargo / Função</span>
-                          <span className="font-bold text-gray-800 dark:text-white">{exp.cargo_funcao || 'Não informado'}</span>
+                          <span className="font-bold text-gray-800 dark:text-white break-words">{exp.cargo_funcao || 'Não informado'}</span>
                         </div>
                         <div>
                           <span className="text-[10px] font-bold uppercase text-gray-400 block">Última Empresa</span>
-                          <span className="font-bold text-gray-800 dark:text-white">{exp.ultima_empresa || 'Não informada'}</span>
+                          <span className="font-bold text-gray-800 dark:text-white break-words">{exp.ultima_empresa || 'Não informada'}</span>
                         </div>
                         <div>
                           <span className="text-[10px] font-bold uppercase text-gray-400 block">Área de Atuação</span>
-                          <span className="font-bold text-gray-800 dark:text-white">{exp.area_atuacao || 'Não informada'}</span>
+                          <span className="font-bold text-gray-800 dark:text-white break-words">{exp.area_atuacao || 'Não informada'}</span>
                         </div>
                         <div>
                           <span className="text-[10px] font-bold uppercase text-gray-400 block">Tempo de Experiência</span>
@@ -4565,7 +4666,7 @@ const AdminDashboard: React.FC = () => {
                     {exp?.principais_atividades && (
                       <div className="pt-2">
                         <span className="text-[10px] font-bold uppercase text-gray-400 block mb-1">Principais Atividades:</span>
-                        <p className="text-xs text-gray-700 dark:text-gray-300 whitespace-pre-wrap leading-relaxed">
+                        <p className="text-xs text-gray-700 dark:text-gray-300 whitespace-pre-wrap leading-relaxed break-words">
                           {exp.principais_atividades}
                         </p>
                       </div>
@@ -4596,34 +4697,34 @@ const AdminDashboard: React.FC = () => {
 
                   {hasCurriculoAnexo ? (
                     /* ESTADO 1: Disponível */
-                    <div className="p-5 bg-green-50/70 dark:bg-green-950/20 border border-green-200 dark:border-green-900/50 rounded-2xl flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
-                      <div className="flex items-center gap-3">
-                        <div className="p-3 bg-green-100 dark:bg-green-900/40 text-green-700 dark:text-green-300 rounded-xl">
+                    <div className="p-4 sm:p-5 bg-green-50/70 dark:bg-green-950/20 border border-green-200 dark:border-green-900/50 rounded-2xl flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-4">
+                      <div className="flex items-center gap-3 min-w-0">
+                        <div className="p-3 bg-green-100 dark:bg-green-900/40 text-green-700 dark:text-green-300 rounded-xl shrink-0">
                           <FileCheck2 className="h-6 w-6" />
                         </div>
-                        <div>
+                        <div className="min-w-0 flex-1">
                           <p className="text-xs font-black uppercase text-green-800 dark:text-green-300">
                             Currículo em Anexo Disponível
                           </p>
-                          <p className="text-xs text-green-700/80 dark:text-green-400/80">
+                          <p className="text-xs text-green-700/80 dark:text-green-400/80 truncate">
                             {selectedResume.curriculo_nome_arquivo || 'Documento PDF/DOCX armazenado no Google Drive corporativo'}
                           </p>
                         </div>
                       </div>
                       <button 
                         onClick={() => handleVerCurriculo(selectedResume)}
-                        className="bg-black dark:bg-white text-white dark:text-black hover:bg-gray-800 px-6 py-3.5 rounded-xl font-bold uppercase text-xs flex items-center gap-2 transition-all shadow-md active:scale-95 shrink-0"
+                        className="w-full sm:w-auto bg-black dark:bg-white text-white dark:text-black hover:bg-gray-800 px-6 py-3.5 rounded-xl font-bold uppercase text-xs flex items-center justify-center gap-2 transition-all shadow-md active:scale-95 shrink-0"
                       >
                         <Download className="h-4 w-4" /> Ver / Baixar Currículo
                       </button>
                     </div>
                   ) : (
                     /* ESTADO 2: Não anexado pelo candidato */
-                    <div className="p-5 bg-blue-50/70 dark:bg-blue-950/20 border border-blue-200 dark:border-blue-900/50 rounded-2xl flex items-start gap-3">
+                    <div className="p-4 sm:p-5 bg-blue-50/70 dark:bg-blue-950/20 border border-blue-200 dark:border-blue-900/50 rounded-2xl flex items-start gap-3">
                       <div className="p-2.5 bg-blue-100 dark:bg-blue-900/40 text-blue-700 dark:text-blue-300 rounded-xl shrink-0 mt-0.5">
                         <UserCheck className="h-5 w-5" />
                       </div>
-                      <div>
+                      <div className="min-w-0 flex-1">
                         <p className="text-xs font-black uppercase text-blue-800 dark:text-blue-300">
                           Candidato optou por não anexar currículo em arquivo
                         </p>
@@ -4648,7 +4749,7 @@ const AdminDashboard: React.FC = () => {
                       <span className="text-[10px] font-bold uppercase text-gray-400 block flex items-center gap-1">
                         <Home className="h-3 w-3 text-red-600" /> Residência do Candidato
                       </span>
-                      <span className="text-xs font-bold text-gray-800 dark:text-white block mt-0.5 uppercase">
+                      <span className="text-xs font-bold text-gray-800 dark:text-white block mt-0.5 uppercase truncate" title={selectedResume.cidade_residencia || selectedResume.candidato_cidade || 'Não informada'}>
                         {selectedResume.cidade_residencia || selectedResume.candidato_cidade || 'Não informada'}
                       </span>
                       <span className="text-[10px] text-gray-400 block mt-1">Cidade onde o candidato mora</span>
@@ -4662,14 +4763,14 @@ const AdminDashboard: React.FC = () => {
                       <span className="text-xs font-bold text-gray-800 dark:text-white block mt-0.5 truncate" title={selectedResume.unidade_pretendida || 'Banco de Talentos Corporativo'}>
                         {selectedResume.unidade_pretendida || selectedResume.loja_nome || 'Banco de Talentos Corporativo'}
                       </span>
-                      <span className="text-[10px] text-gray-400 block mt-1">
+                      <span className="text-[10px] text-gray-400 block mt-1 truncate">
                         {selectedResume.loja_cidade ? `Localizada em ${selectedResume.loja_cidade}${selectedResume.loja_estado ? ' - ' + selectedResume.loja_estado : ''}` : 'Candidatura Geral / Corporativo'}
                       </span>
                     </div>
 
                     <div className="p-4 bg-gray-50/80 dark:bg-gray-800/60 rounded-xl border border-gray-100 dark:border-gray-700">
                       <span className="text-[10px] font-bold uppercase text-gray-400 block">WhatsApp / Telefone</span>
-                      <span className="text-xs font-bold text-gray-800 dark:text-white block mt-0.5">{selectedResume.telefone || 'Não informado'}</span>
+                      <span className="text-xs font-bold text-gray-800 dark:text-white block mt-0.5 font-mono">{selectedResume.telefone || 'Não informado'}</span>
                       {whatsappUrl && (
                         <a 
                           href={whatsappUrl} 
@@ -4682,9 +4783,9 @@ const AdminDashboard: React.FC = () => {
                       )}
                     </div>
 
-                    <div className="p-4 bg-gray-50/80 dark:bg-gray-800/60 rounded-xl border border-gray-100 dark:border-gray-700">
+                    <div className="p-4 bg-gray-50/80 dark:bg-gray-800/60 rounded-xl border border-gray-100 dark:border-gray-700 min-w-0">
                       <span className="text-[10px] font-bold uppercase text-gray-400 block">E-mail</span>
-                      <span className="text-xs font-bold text-gray-800 dark:text-white block mt-0.5 truncate">{selectedResume.email}</span>
+                      <span className="text-xs font-bold text-gray-800 dark:text-white block mt-0.5 break-all" title={selectedResume.email}>{selectedResume.email}</span>
                       <a 
                         href={`mailto:${selectedResume.email}?subject=${encodeURIComponent(`Contato Gigante Pneus - Vaga ${selectedResume.vaga_interesse}`)}`}
                         className="mt-2 inline-flex items-center gap-1.5 text-[11px] font-bold text-red-600 hover:text-red-700"
@@ -4701,7 +4802,7 @@ const AdminDashboard: React.FC = () => {
 
                     <div className="p-4 bg-gray-50/80 dark:bg-gray-800/60 rounded-xl border border-gray-100 dark:border-gray-700">
                       <span className="text-[10px] font-bold uppercase text-gray-400 block">Escolaridade</span>
-                      <span className="text-xs font-bold text-gray-800 dark:text-white block mt-0.5">{selectedResume.escolaridade || 'Não informada'}</span>
+                      <span className="text-xs font-bold text-gray-800 dark:text-white block mt-0.5 truncate">{selectedResume.escolaridade || 'Não informada'}</span>
                     </div>
 
                     <div className="p-4 bg-gray-50/80 dark:bg-gray-800/60 rounded-xl border border-gray-100 dark:border-gray-700">
@@ -4713,7 +4814,7 @@ const AdminDashboard: React.FC = () => {
                           rel="noopener noreferrer"
                           className="text-xs font-bold text-blue-600 hover:underline flex items-center gap-1 mt-0.5 truncate"
                         >
-                          <ExternalLink className="h-3 w-3" /> Ver LinkedIn
+                          <ExternalLink className="h-3 w-3 shrink-0" /> <span className="truncate">Ver LinkedIn</span>
                         </a>
                       ) : (
                         <span className="text-xs text-gray-400 block mt-0.5">Não informado</span>
@@ -4732,10 +4833,10 @@ const AdminDashboard: React.FC = () => {
               </div>
 
               {/* Rodapé do Modal */}
-              <div className="p-6 border-t border-gray-100 dark:border-gray-800 bg-gray-50/50 dark:bg-gray-800/50 flex justify-end">
+              <div className="p-4 sm:p-6 border-t border-gray-100 dark:border-gray-800 bg-gray-50/50 dark:bg-gray-800/50 flex justify-end shrink-0">
                 <button 
                   onClick={() => setSelectedResume(null)}
-                  className="bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-700 text-gray-700 dark:text-gray-300 px-8 py-3.5 rounded-2xl font-black uppercase text-xs hover:bg-gray-100 dark:hover:bg-gray-700 transition-all shadow-sm"
+                  className="w-full sm:w-auto bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-700 text-gray-700 dark:text-gray-300 px-8 py-3 rounded-xl sm:rounded-2xl font-black uppercase text-xs hover:bg-gray-100 dark:hover:bg-gray-700 transition-all shadow-sm"
                 >
                   Fechar Dossiê
                 </button>
