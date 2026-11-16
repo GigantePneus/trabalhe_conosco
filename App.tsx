@@ -31,14 +31,14 @@ const App: React.FC = () => {
   }, [darkMode]);
 
   useEffect(() => {
-    // 1. Tratamento e captura de tokens de recuperação do Supabase
+    // 1. Tratamento e captura de tokens de recuperação e convite do Supabase
     const handleUrlTokensAndRecovery = async () => {
       const fullUrl = window.location.href;
       const pathname = window.location.pathname;
       const searchParams = new URLSearchParams(window.location.search);
       const hash = window.location.hash || '';
 
-      // Extrai parâmetros do fragmento hash caso existam
+      // Extrai parâmetros do fragmento hash caso existam (#access_token=...&type=invite)
       let hashParams = new URLSearchParams();
       if (hash.includes('#')) {
         const parts = hash.split('#');
@@ -50,27 +50,32 @@ const App: React.FC = () => {
         }
       }
 
-      const isRecovery = 
-        pathname === '/reset-password' ||
-        pathname.startsWith('/reset-password') ||
-        pathname === '/definir-senha' ||
-        pathname.startsWith('/definir-senha') ||
-        pathname === '/redefinir-senha' ||
-        pathname.startsWith('/redefinir-senha') ||
-        searchParams.get('type') === 'recovery' ||
-        hashParams.get('type') === 'recovery' ||
-        searchParams.get('type') === 'invite' ||
-        hashParams.get('type') === 'invite' ||
-        fullUrl.includes('type=recovery') ||
-        fullUrl.includes('type=invite');
+      // Detecção de tokens explícitos de convite ou recuperação na URL
+      const paramType = searchParams.get('type') || hashParams.get('type');
+      const isInviteToken = paramType === 'invite' || fullUrl.includes('type=invite') || fullUrl.includes('type=signup');
+      const isRecoveryToken = paramType === 'recovery' || fullUrl.includes('type=recovery');
+      const accessToken = hashParams.get('access_token');
+      const refreshToken = hashParams.get('refresh_token');
+      const code = searchParams.get('code');
 
-      if (isRecovery) {
+      const hasAuthTokens = Boolean(accessToken || code || isInviteToken || isRecoveryToken);
+
+      // Se o usuário está acessando intencionalmente a rota de login, desarma qualquer modo de recuperação pendente
+      if (hash === '#/login' || hash.startsWith('#/login') || pathname === '/login') {
+        setIsPasswordRecoveryMode(false);
+        sessionStorage.removeItem('gigante_recovery_mode');
+        if (pathname !== '/' && (pathname.startsWith('/reset-password') || pathname.startsWith('/definir-senha'))) {
+          window.history.replaceState(null, '', '/#/login');
+        }
+        return;
+      }
+
+      // Se há tokens de autenticação válidos para convite ou recuperação
+      if (hasAuthTokens && (isInviteToken || isRecoveryToken)) {
         setIsPasswordRecoveryMode(true);
         sessionStorage.setItem('gigante_recovery_mode', 'true');
 
         // Se o Supabase enviou tokens no hash, inicializa explicitamente a sessão
-        const accessToken = hashParams.get('access_token');
-        const refreshToken = hashParams.get('refresh_token');
         if (accessToken && refreshToken) {
           await supabase.auth.setSession({
             access_token: accessToken,
@@ -79,46 +84,62 @@ const App: React.FC = () => {
         }
 
         // Se o Supabase enviou código PKCE (?code=...)
-        const code = searchParams.get('code');
         if (code) {
           await supabase.auth.exchangeCodeForSession(code);
         }
 
-        // Se o pathname não for a rota esperada, normaliza a rota no HashRouter para #/reset-password
-        if (window.location.hash !== '#/reset-password' && window.location.hash !== '#/definir-senha') {
-          window.location.hash = '#/reset-password';
-        }
+        // Normaliza imediatamente a URL removendo tokens expostos e pathnames residuais do browser
+        window.history.replaceState(null, '', '/#/reset-password');
+        window.location.hash = '#/reset-password';
       } else {
-        if (sessionStorage.getItem('gigante_recovery_mode') === 'true') {
-          setIsPasswordRecoveryMode(true);
-        } else if (
+        // Se NÃO há tokens de convite ou recuperação na URL:
+        // Limpa qualquer pathname residual do servidor (/reset-password -> /#...)
+        if (
           pathname === '/reset-password' ||
           pathname.startsWith('/reset-password') ||
           pathname === '/definir-senha' ||
-          pathname.startsWith('/definir-senha')
+          pathname.startsWith('/definir-senha') ||
+          pathname === '/redefinir-senha' ||
+          pathname.startsWith('/redefinir-senha')
         ) {
-          // Limpa pathname residual quando o usuário já concluiu o fluxo de definição de senha
-          const targetHash = window.location.hash || '#/admin';
+          const targetHash = window.location.hash || '#/login';
           window.history.replaceState(null, '', `/${targetHash}`);
+        }
+
+        // Se o hash não for de reset-password, garante que o modo de recuperação não fique ativo
+        if (hash !== '#/reset-password' && hash !== '#/definir-senha' && hash !== '#/redefinir-senha') {
+          setIsPasswordRecoveryMode(false);
+          sessionStorage.removeItem('gigante_recovery_mode');
         }
       }
     };
 
     handleUrlTokensAndRecovery();
 
-    // 2. Consulta a sessão atual
+    // 2. Ouvinte de hashchange: se o usuário navegar para o login, cancela o modo de recovery
+    const handleHashChange = () => {
+      const currentHash = window.location.hash || '';
+      if (currentHash === '#/login' || currentHash.startsWith('#/login')) {
+        setIsPasswordRecoveryMode(false);
+        sessionStorage.removeItem('gigante_recovery_mode');
+      }
+    };
+    window.addEventListener('hashchange', handleHashChange);
+
+    // 3. Consulta a sessão atual
     supabase.auth.getSession().then(({ data: { session } }) => {
       setUser(session?.user ?? null);
       setLoading(false);
     });
 
-    // 3. Listener para eventos de autenticação
+    // 4. Listener para eventos de autenticação
     const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
       setUser(session?.user ?? null);
 
       if (event === 'PASSWORD_RECOVERY') {
         setIsPasswordRecoveryMode(true);
         sessionStorage.setItem('gigante_recovery_mode', 'true');
+        window.history.replaceState(null, '', '/#/reset-password');
         window.location.hash = '#/reset-password';
       }
 
@@ -128,7 +149,10 @@ const App: React.FC = () => {
       }
     });
 
-    return () => subscription.unsubscribe();
+    return () => {
+      window.removeEventListener('hashchange', handleHashChange);
+      subscription.unsubscribe();
+    };
   }, []);
 
   const handleLogout = async () => {
@@ -229,9 +253,7 @@ const App: React.FC = () => {
             <Route 
               path="/login" 
               element={
-                isPasswordRecoveryMode ? (
-                  <Navigate to="/reset-password" replace />
-                ) : activeUser ? (
+                activeUser && !isPasswordRecoveryMode ? (
                   <Navigate to="/admin" replace />
                 ) : (
                   <Login />

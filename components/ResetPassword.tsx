@@ -165,18 +165,27 @@ const ResetPassword: React.FC<ResetPasswordProps> = ({ onSuccess }) => {
 
       // Limpa os marcadores de recuperação
       sessionStorage.removeItem('gigante_recovery_mode');
+      if (onSuccess) {
+        onSuccess();
+      }
 
       setCompleted(true);
       setStatusMsg({
-        text: 'Sua senha foi redefinida com sucesso! Você já pode acessar o Painel RH.',
+        text: isInviteFlow 
+          ? 'Sua conta foi ativada e sua senha foi definida com sucesso! Você já pode acessar o Painel RH.' 
+          : 'Sua senha foi redefinida com sucesso! Você já pode acessar o Painel RH.',
         type: 'success'
       });
       setNewPassword('');
       setConfirmPassword('');
 
-      if (onSuccess) {
-        setTimeout(() => onSuccess(), 1500);
-      }
+      // Redirecionamento automático seguro após 2 segundos
+      setTimeout(() => {
+        sessionStorage.removeItem('gigante_recovery_mode');
+        onSuccess?.();
+        window.history.replaceState(null, '', '/#/admin');
+        window.location.hash = '#/admin';
+      }, 2000);
     } catch (err: any) {
       setStatusMsg({
         text: err?.message || 'Falha ao redefinir a senha. O link pode ter expirado.',
@@ -185,6 +194,14 @@ const ResetPassword: React.FC<ResetPasswordProps> = ({ onSuccess }) => {
     } finally {
       setLoading(false);
     }
+  };
+
+  const handleVoltarLogin = async () => {
+    sessionStorage.removeItem('gigante_recovery_mode');
+    onSuccess?.();
+    await supabase.auth.signOut();
+    window.history.replaceState(null, '', '/#/login');
+    window.location.hash = '#/login';
   };
 
   if (checkingSession) {
@@ -210,15 +227,32 @@ const ResetPassword: React.FC<ResetPasswordProps> = ({ onSuccess }) => {
           <div>
             <h2 className="text-2xl font-black uppercase text-gray-900 dark:text-white tracking-tight">Link Expirado ou Inválido</h2>
             <p className="text-xs text-gray-500 dark:text-gray-400 font-medium mt-2 leading-relaxed">
-              Não identificamos uma solicitação ativa de recuperação de senha. O link recebido por e-mail pode ter expirado ou já ter sido utilizado.
+              Não identificamos uma solicitação ativa de recuperação ou convite de senha. O link recebido por e-mail pode ter expirado ou já ter sido utilizado.
             </p>
           </div>
-          <a
-            href="#/login"
-            className="w-full inline-flex items-center justify-center gap-2 bg-red-600 hover:bg-red-700 text-white font-black uppercase py-4 rounded-xl text-sm transition-all shadow-lg"
-          >
-            Voltar ao Login e Solicitar Novo Link
-          </a>
+          <div className="space-y-3">
+            <button
+              type="button"
+              onClick={handleVoltarLogin}
+              className="w-full inline-flex items-center justify-center gap-2 bg-red-600 hover:bg-red-700 text-white font-black uppercase py-4 rounded-xl text-sm transition-all shadow-lg cursor-pointer"
+            >
+              Voltar ao Formulário de Login
+            </button>
+            {userEmail && (
+              <button
+                type="button"
+                onClick={() => {
+                  sessionStorage.removeItem('gigante_recovery_mode');
+                  onSuccess?.();
+                  window.history.replaceState(null, '', '/#/admin');
+                  window.location.hash = '#/admin';
+                }}
+                className="w-full inline-flex items-center justify-center gap-2 bg-gray-100 dark:bg-gray-800 hover:bg-gray-200 dark:hover:bg-gray-700 text-gray-800 dark:text-gray-200 font-black uppercase py-3.5 rounded-xl text-xs transition-all cursor-pointer"
+              >
+                Já possuo cadastro: Acessar o Painel RH
+              </button>
+            )}
+          </div>
         </div>
       </div>
     );
@@ -260,20 +294,18 @@ const ResetPassword: React.FC<ResetPasswordProps> = ({ onSuccess }) => {
                   {statusMsg.text}
                 </p>
               </div>
-              <a
-                href="#/admin"
-                onClick={(e) => {
-                  e.preventDefault();
+              <button
+                type="button"
+                onClick={() => {
+                  sessionStorage.removeItem('gigante_recovery_mode');
                   onSuccess?.();
-                  if (typeof window !== 'undefined') {
-                    window.history.replaceState(null, '', '/#/admin');
-                    window.location.hash = '#/admin';
-                  }
+                  window.history.replaceState(null, '', '/#/admin');
+                  window.location.hash = '#/admin';
                 }}
                 className="w-full inline-flex items-center justify-center gap-2 bg-red-600 hover:bg-red-700 text-white font-black uppercase py-4 rounded-xl text-sm transition-all shadow-lg cursor-pointer"
               >
                 Acessar o Painel RH <ArrowRight className="h-4 w-4" />
-              </a>
+              </button>
             </div>
           ) : (
             <form onSubmit={handleReset} className="space-y-6">
@@ -356,12 +388,13 @@ const ResetPassword: React.FC<ResetPasswordProps> = ({ onSuccess }) => {
           )}
 
           <div className="mt-8 pt-6 border-t border-gray-100 dark:border-gray-800 text-center">
-            <a
-              href="#/login"
-              className="text-xs font-bold text-gray-500 hover:text-red-600 uppercase tracking-wider transition-colors"
+            <button
+              type="button"
+              onClick={handleVoltarLogin}
+              className="text-xs font-bold text-gray-500 hover:text-red-600 uppercase tracking-wider transition-colors cursor-pointer inline-flex items-center gap-1.5"
             >
               Voltar para o Login
-            </a>
+            </button>
           </div>
         </div>
       </div>

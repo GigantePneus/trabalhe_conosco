@@ -90,6 +90,11 @@ export const analyzeSurveyResponses = async (
   ollamaModel: string = 'llama3.2:3b',
   customPrompt?: string
 ): Promise<AIAnalysisResult> => {
+  // Proteção V1 contra chamadas desautorizadas e consumo acidental de créditos
+  if (provider === 'gemini' && !geminiKey?.trim()) {
+    throw new Error("Análise de IA de pesquisas indisponível sem chave de API autorizada pela franqueadora.");
+  }
+
   // Preparar os dados das respostas em formato legível de texto para enviar para a IA
   const formattedData = respostas.map((r, index) => {
     const answersText = perguntas.map(p => {
@@ -148,6 +153,11 @@ export const analyzeTalentCompatibility = async (
   ollamaModel: string = 'llama3.2:3b',
   customPrompt?: string
 ): Promise<TalentAnalysisResult> => {
+  // Proteção V1 contra chamadas desautorizadas e consumo de créditos de IA
+  if (provider === 'gemini' && !geminiKey?.trim()) {
+    throw new Error("Triagem de IA desabilitada na V1. O recurso será disponibilizado na V2 como benefício incluso para as franquias.");
+  }
+
   const systemInstructions = customPrompt || DEFAULT_PROMPT_TALENTS;
   const prompt = `${systemInstructions}
 

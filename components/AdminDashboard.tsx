@@ -166,8 +166,8 @@ const AdminDashboard: React.FC = () => {
   const [savingSurvey, setSavingSurvey] = useState(false);
 
   // Estado da Análise com Inteligência Artificial
-  const [geminiKey, setGeminiKey] = useState(() => localStorage.getItem('gigante_gemini_key') || '');
-  const [tempGeminiKey, setTempGeminiKey] = useState(() => localStorage.getItem('gigante_gemini_key') || '');
+  const [geminiKey, setGeminiKey] = useState<string>('');
+  const [tempGeminiKey, setTempGeminiKey] = useState<string>('');
   const [geminiSaveStatus, setGeminiSaveStatus] = useState<'idle' | 'saved'>('idle');
   const [aiProvider, setAiProvider] = useState<'ollama' | 'gemini'>(() => {
     const savedProvider = localStorage.getItem('gigante_ai_provider');
@@ -188,13 +188,13 @@ const AdminDashboard: React.FC = () => {
   const [analyzingTalentId, setAnalyzingTalentId] = useState<string | null>(null);
   const [aiSubTab, setAiSubTab] = useState<'surveys' | 'talents'>('surveys');
 
-  // Prompts customizados (Treinamento de Agentes de IA)
-  const [promptSurveys, setPromptSurveys] = useState(() => localStorage.getItem('gigante_prompt_surveys') || DEFAULT_PROMPT_SURVEYS);
-  const [promptTalents, setPromptTalents] = useState(() => localStorage.getItem('gigante_prompt_talents') || DEFAULT_PROMPT_TALENTS);
+  // Prompts customizados (Treinamento de Agentes de IA - Exclusivo Gestor Master)
+  const [promptSurveys, setPromptSurveys] = useState<string>('');
+  const [promptTalents, setPromptTalents] = useState<string>('');
   const [promptSaveStatus, setPromptSaveStatus] = useState<'idle' | 'saved'>('idle');
 
   // Estado da Gestão de Usuários e Segurança
-  const [settingsSubTab, setSettingsSubTab] = useState<'geral' | 'seguranca' | 'usuarios'>('geral');
+  const [settingsSubTab, setSettingsSubTab] = useState<'geral' | 'seguranca' | 'usuarios'>('seguranca');
   const [newUserEmail, setNewUserEmail] = useState('');
   const [newUserPassword, setNewUserPassword] = useState('');
   const [creatingUser, setCreatingUser] = useState(false);
@@ -231,6 +231,22 @@ const AdminDashboard: React.FC = () => {
       setCurrentUserName(resolvedNome);
       setUserRole(role);
 
+      // Carregamento de chaves e instruções estritamente para o Gestor Master (franqueadora_admin)
+      const isMaster = role === 'franqueadora_admin';
+      if (isMaster) {
+        const savedKey = localStorage.getItem('gigante_gemini_key') || '';
+        setGeminiKey(savedKey);
+        setTempGeminiKey(savedKey);
+        setPromptSurveys(localStorage.getItem('gigante_prompt_surveys') || DEFAULT_PROMPT_SURVEYS);
+        setPromptTalents(localStorage.getItem('gigante_prompt_talents') || DEFAULT_PROMPT_TALENTS);
+      } else {
+        setGeminiKey('');
+        setTempGeminiKey('');
+        setPromptSurveys('');
+        setPromptTalents('');
+        setSettingsSubTab('seguranca');
+      }
+
       let mappedLojas: any[] = [];
       // Se for franqueado ou gerente, busca as unidades autorizadas
       if (role === 'franqueado' || role === 'gerente') {
@@ -266,10 +282,16 @@ const AdminDashboard: React.FC = () => {
   }, []);
 
   useEffect(() => {
-    if (!isGestorMaster && settingsSubTab === 'usuarios') {
-      setSettingsSubTab('geral');
+    if (!isGestorMaster && settingsSubTab !== 'seguranca') {
+      setSettingsSubTab('seguranca');
     }
   }, [isGestorMaster, settingsSubTab]);
+
+  useEffect(() => {
+    if (!isGestorMaster && (activeTab === 'ai' || activeTab === 'lojas' || activeTab === 'acessos')) {
+      setActiveTab('overview');
+    }
+  }, [isGestorMaster, activeTab]);
 
   useEffect(() => {
     localStorage.setItem('gigante_ai_provider', aiProvider);
@@ -284,7 +306,7 @@ const AdminDashboard: React.FC = () => {
   }, [geminiModel]);
 
   useEffect(() => {
-    if (aiProvider !== 'gemini' || !geminiKey) {
+    if (!isGestorMaster || aiProvider !== 'gemini' || !geminiKey) {
       setGeminiModels([]);
       setGeminiModelsError('');
       return;
@@ -1239,6 +1261,7 @@ const AdminDashboard: React.FC = () => {
   };
 
   const handleSaveGeminiKey = (key: string) => {
+    if (!isGestorMaster) return;
     const normalizedKey = key.trim();
     setGeminiKey(normalizedKey);
     setTempGeminiKey(normalizedKey);
@@ -1251,6 +1274,7 @@ const AdminDashboard: React.FC = () => {
   };
 
   const handleSavePrompts = () => {
+    if (!isGestorMaster) return;
     localStorage.setItem('gigante_prompt_surveys', promptSurveys);
     localStorage.setItem('gigante_prompt_talents', promptTalents);
     setPromptSaveStatus('saved');
@@ -1258,6 +1282,7 @@ const AdminDashboard: React.FC = () => {
   };
 
   const handleResetPrompts = () => {
+    if (!isGestorMaster) return;
     if (window.confirm("Deseja realmente restaurar os prompts padrões do sistema?")) {
       setPromptSurveys(DEFAULT_PROMPT_SURVEYS);
       setPromptTalents(DEFAULT_PROMPT_TALENTS);
@@ -1376,19 +1401,45 @@ const AdminDashboard: React.FC = () => {
     }
   };
 
-  const SidebarItem = ({ id, label, icon }: { id: typeof activeTab, label: string, icon: React.ReactNode }) => {
-    const isActive = activeTab === id;
+  const SidebarItem = ({ 
+    id, 
+    label, 
+    icon, 
+    disabled = false, 
+    badge 
+  }: { 
+    id: typeof activeTab; 
+    label: string; 
+    icon: React.ReactNode; 
+    disabled?: boolean; 
+    badge?: string; 
+  }) => {
+    const isActive = activeTab === id && !disabled;
     return (
       <button
-        onClick={() => setActiveTab(id)}
-        className={`w-full flex items-center gap-3 px-6 py-4 transition-all text-sm font-bold tracking-wide uppercase border-l-4 ${
-          isActive 
-            ? 'bg-red-50 dark:bg-red-900/20 text-red-700 dark:text-red-400 border-red-600' 
-            : 'text-gray-500 hover:bg-gray-50 dark:hover:bg-gray-800/50 border-transparent hover:border-gray-300 dark:hover:border-gray-700'
+        type="button"
+        disabled={disabled}
+        onClick={() => {
+          if (!disabled) setActiveTab(id);
+        }}
+        title={disabled && badge ? `${label} (${badge})` : label}
+        className={`w-full flex items-center justify-between px-6 py-4 transition-all text-sm font-bold tracking-wide uppercase border-l-4 ${
+          disabled
+            ? 'opacity-40 cursor-not-allowed border-transparent text-gray-400 dark:text-gray-600 select-none hover:bg-transparent'
+            : isActive 
+              ? 'bg-red-50 dark:bg-red-900/20 text-red-700 dark:text-red-400 border-red-600' 
+              : 'text-gray-500 hover:bg-gray-50 dark:hover:bg-gray-800/50 border-transparent hover:border-gray-300 dark:hover:border-gray-700'
         }`}
       >
-        {icon}
-        {label}
+        <div className="flex items-center gap-3 truncate">
+          {icon}
+          <span className="truncate">{label}</span>
+        </div>
+        {badge && (
+          <span className="text-[9px] font-black uppercase tracking-wider px-2 py-0.5 rounded-full bg-gray-100 dark:bg-gray-800 text-gray-500 dark:text-gray-400 border border-gray-200 dark:border-gray-700 shrink-0">
+            {badge}
+          </span>
+        )}
       </button>
     );
   };
@@ -1438,7 +1489,13 @@ const AdminDashboard: React.FC = () => {
           <SidebarItem id="overview" label="Visão Geral" icon={<BarChart3 className="h-5 w-5" />} />
           <SidebarItem id="talents" label="Banco de Talentos" icon={<Users className="h-5 w-5" />} />
           <SidebarItem id="surveys" label="Pesquisas Internas" icon={<ClipboardList className="h-5 w-5" />} />
-          <SidebarItem id="ai" label="Análise de IA" icon={<Sparkles className="h-5 w-5" />} />
+          <SidebarItem 
+            id="ai" 
+            label="Análise de IA" 
+            icon={<Sparkles className="h-5 w-5" />} 
+            disabled={!isGestorMaster}
+            badge={!isGestorMaster ? "Em breve" : undefined}
+          />
           <SidebarItem id="jobs" label="Mural de Vagas" icon={<Briefcase className="h-5 w-5" />} />
           {isGestorMaster && (
             <>
@@ -2095,7 +2152,7 @@ const AdminDashboard: React.FC = () => {
           )}
 
           {/* Aba: INTELIGÊNCIA ARTIFICIAL */}
-          {activeTab === 'ai' && (
+          {activeTab === 'ai' && isGestorMaster && (
             <div className="space-y-8 animate-in fade-in slide-in-from-bottom-4 duration-500">
               {/* Cabeçalho da IA */}
               <div className="flex flex-col md:flex-row md:items-center justify-between gap-6 bg-gradient-to-r from-red-600 to-rose-600 p-8 rounded-[2.5rem] text-white shadow-xl relative overflow-hidden">
@@ -2826,7 +2883,7 @@ const AdminDashboard: React.FC = () => {
           )}
 
           {/* Aba: GESTÃO DE UNIDADES (LOJAS) - PROMPT 51 */}
-          {activeTab === 'lojas' && (
+          {activeTab === 'lojas' && isGestorMaster && (
             <div className="space-y-8 animate-in fade-in duration-500">
               
               {/* Cabeçalho Principal da Rede */}
@@ -4024,12 +4081,14 @@ const AdminDashboard: React.FC = () => {
               
               {/* Menu de Sub-Abas de Configuração */}
               <div className="flex items-center gap-4 border-b border-gray-200 dark:border-gray-800 pb-2">
-                <button
-                  onClick={() => setSettingsSubTab('geral')}
-                  className={`text-sm font-black uppercase tracking-widest pb-3 px-2 border-b-2 transition-all ${settingsSubTab === 'geral' ? 'border-red-600 text-red-600' : 'border-transparent text-gray-500 hover:text-gray-700'}`}
-                >
-                  Configurações Gerais
-                </button>
+                {isGestorMaster && (
+                  <button
+                    onClick={() => setSettingsSubTab('geral')}
+                    className={`text-sm font-black uppercase tracking-widest pb-3 px-2 border-b-2 transition-all ${settingsSubTab === 'geral' ? 'border-red-600 text-red-600' : 'border-transparent text-gray-500 hover:text-gray-700'}`}
+                  >
+                    Configurações Gerais
+                  </button>
+                )}
                 <button
                   onClick={() => setSettingsSubTab('seguranca')}
                   className={`text-sm font-black uppercase tracking-widest pb-3 px-2 border-b-2 transition-all ${settingsSubTab === 'seguranca' ? 'border-red-600 text-red-600' : 'border-transparent text-gray-500 hover:text-gray-700'}`}
@@ -4046,7 +4105,7 @@ const AdminDashboard: React.FC = () => {
                 )}
               </div>
 
-              {settingsSubTab === 'geral' && (
+              {isGestorMaster && settingsSubTab === 'geral' && (
                 <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
               
               {/* Box de Setup da IA */}
