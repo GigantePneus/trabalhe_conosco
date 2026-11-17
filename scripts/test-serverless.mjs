@@ -14,7 +14,8 @@ const expectedEndpoints = [
   'api/curriculos/download.js',
   'api/integracoes/google/autorizar.js',
   'api/integracoes/google/callback.js',
-  'api/admin/usuarios.js'
+  'api/admin/usuarios.js',
+  'api/admin/vagas.js'
 ];
 
 console.log('\n1. Verificando presença dos artefatos JavaScript em /api...');

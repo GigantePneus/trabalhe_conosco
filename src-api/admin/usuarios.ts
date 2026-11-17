@@ -5,7 +5,7 @@ let supabaseAdminInstance: SupabaseClient | null = null;
 function getSupabaseAdmin(): SupabaseClient {
   if (supabaseAdminInstance) return supabaseAdminInstance;
 
-  const supaUrl = process.env.SUPABASE_URL || process.env.SUPABASE_INTERNAL_URL || process.env.VITE_SUPABASE_URL || 'https://hidayzojjztfyuefmknz.supabase.co';
+  const supaUrl = process.env.SUPABASE_URL || process.env.SUPABASE_INTERNAL_URL || process.env.VITE_SUPABASE_URL;
   const supaServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
 
   if (!supaUrl || !supaServiceKey) {

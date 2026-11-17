@@ -10,7 +10,16 @@ const entryPoints = [
   'src-api/curriculos/download.ts',
   'src-api/integracoes/google/autorizar.ts',
   'src-api/integracoes/google/callback.ts',
-  'src-api/admin/usuarios.ts'
+  'src-api/admin/usuarios.ts',
+  'src-api/admin/vagas.ts',
+  'src-api/admin/candidatos.ts',
+  'src-api/health.ts',
+  'src-api/mcp.ts',
+  'src-api/oauth/metadata.ts',
+  'src-api/oauth/authorize.ts',
+  'src-api/oauth/token.ts',
+  'src-api/oauth/userinfo.ts',
+  'src-api/oauth/revoke.ts'
 ];
 
 // Limpar e preparar o diretório de destino api/

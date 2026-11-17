@@ -180,6 +180,231 @@ function candidaturasApiPlugin(): Plugin {
           return;
         }
 
+        // Rota Administrativa para Listar Lojas (MCP)
+        if (req.url?.startsWith('/api/admin/lojas') && req.method === 'GET') {
+          const authHeader = (req.headers['authorization'] as string) || undefined;
+          try {
+            const { handleListarLojas } = await import(getApiModuleUrl('api/admin/vagas.js'));
+            const result = await handleListarLojas(authHeader);
+            res.statusCode = result.statusCode;
+            res.setHeader('Content-Type', 'application/json');
+            res.setHeader('Cache-Control', 'no-store');
+            res.end(JSON.stringify(result.data));
+          } catch (err: any) {
+            res.statusCode = 500;
+            res.setHeader('Content-Type', 'application/json');
+            res.end(JSON.stringify({ success: false, error: err.message || 'Erro interno' }));
+          }
+          return;
+        }
+
+        // Rota Administrativa para Gestão de Vagas (MCP Fase 1)
+        if (req.url?.startsWith('/api/admin/vagas')) {
+          const authHeader = (req.headers['authorization'] as string) || undefined;
+          const urlObj = new URL(req.url, 'http://localhost:3000');
+          const pathSuffix = urlObj.pathname.replace(/^\/api\/admin\/vagas\/?/, '');
+          const vagaId = urlObj.searchParams.get('id') || (pathSuffix && !pathSuffix.includes('/') ? pathSuffix : undefined);
+
+          const {
+            handleListarVagas,
+            handleConsultarVaga,
+            handleCriarVaga,
+            handleEditarVaga,
+            handleAlterarStatusVaga
+          } = await import(getApiModuleUrl('api/admin/vagas.js'));
+
+          if (req.method === 'GET') {
+            try {
+              if (vagaId) {
+                const result = await handleConsultarVaga(vagaId, authHeader);
+                res.statusCode = result.statusCode;
+                res.setHeader('Content-Type', 'application/json');
+                res.setHeader('Cache-Control', 'no-store');
+                res.end(JSON.stringify(result.data));
+                return;
+              }
+
+              const queryParams = {
+                lojaId: urlObj.searchParams.get('lojaId') || undefined,
+                cidade: urlObj.searchParams.get('cidade') || undefined,
+                titulo: urlObj.searchParams.get('titulo') || undefined,
+                departamento: urlObj.searchParams.get('departamento') || undefined,
+                status: (urlObj.searchParams.get('status') as any) || undefined,
+                page: urlObj.searchParams.get('page') ? Number(urlObj.searchParams.get('page')) : undefined,
+                limit: urlObj.searchParams.get('limit') ? Number(urlObj.searchParams.get('limit')) : undefined
+              };
+
+              const result = await handleListarVagas(queryParams, authHeader);
+              res.statusCode = result.statusCode;
+              res.setHeader('Content-Type', 'application/json');
+              res.setHeader('Cache-Control', 'no-store');
+              res.end(JSON.stringify(result.data));
+            } catch (err: any) {
+              res.statusCode = 500;
+              res.setHeader('Content-Type', 'application/json');
+              res.end(JSON.stringify({ success: false, error: err.message || 'Erro interno' }));
+            }
+            return;
+          }
+
+          let bodyStr = '';
+          req.on('data', (chunk) => {
+            bodyStr += chunk;
+          });
+          req.on('end', async () => {
+            try {
+              const body = JSON.parse(bodyStr || '{}');
+              let result: { statusCode: number; data: any };
+
+              if (req.method === 'POST') {
+                result = await handleCriarVaga(body, authHeader);
+              } else if (req.method === 'PATCH' || req.method === 'PUT') {
+                const targetId = vagaId || body.id || body.vagaId;
+                if (!targetId) {
+                  res.statusCode = 400;
+                  res.setHeader('Content-Type', 'application/json');
+                  res.end(JSON.stringify({ success: false, error: 'ID da vaga não informado.' }));
+                  return;
+                }
+
+                if (body.acao && ['publicar', 'despublicar', 'desativar', 'reativar'].includes(body.acao)) {
+                  result = await handleAlterarStatusVaga({ ...body, vagaId: targetId }, authHeader);
+                } else {
+                  result = await handleEditarVaga({ ...body, vagaId: targetId }, authHeader);
+                }
+              } else {
+                res.statusCode = 405;
+                res.setHeader('Content-Type', 'application/json');
+                res.end(JSON.stringify({ success: false, error: 'Método não permitido' }));
+                return;
+              }
+
+              res.statusCode = result.statusCode;
+              res.setHeader('Content-Type', 'application/json');
+              res.end(JSON.stringify(result.data));
+            } catch (err: any) {
+              res.statusCode = 500;
+              res.setHeader('Content-Type', 'application/json');
+              res.end(JSON.stringify({ success: false, error: err.message || 'Erro interno' }));
+            }
+          });
+          return;
+        }
+
+        // Rota Administrativa para Gestão de Candidatos e Currículos (MCP Fase 2)
+        if (req.url?.startsWith('/api/admin/candidatos')) {
+          const authHeader = (req.headers['authorization'] as string) || undefined;
+          const urlObj = new URL(req.url, 'http://localhost:3000');
+          const pathSuffix = urlObj.pathname.replace(/^\/api\/admin\/candidatos\/?/, '');
+          const candidatoId = urlObj.searchParams.get('id') || (pathSuffix && !pathSuffix.includes('/') ? pathSuffix : undefined);
+
+          const {
+            handleListarCandidatos,
+            handleConsultarCandidato,
+            handleVerificarDuplicidade,
+            handleCriarCandidato,
+            handleEditarCandidato,
+            handleAnexarCurriculo,
+            handleConsultarCurriculos,
+            handleVincularCandidatoLoja
+          } = await import(getApiModuleUrl('api/admin/candidatos.js'));
+
+          if (req.method === 'GET') {
+            try {
+              if (urlObj.pathname.includes('/curriculos') || urlObj.searchParams.get('modo') === 'curriculos') {
+                const targetId = candidatoId || urlObj.searchParams.get('candidatoId');
+                if (!targetId) {
+                  res.statusCode = 400;
+                  res.setHeader('Content-Type', 'application/json');
+                  res.end(JSON.stringify({ success: false, error: 'ID do candidato obrigatório.' }));
+                  return;
+                }
+                const result = await handleConsultarCurriculos(targetId, authHeader);
+                res.statusCode = result.statusCode;
+                res.setHeader('Content-Type', 'application/json');
+                res.setHeader('Cache-Control', 'no-store');
+                res.end(JSON.stringify(result.data));
+                return;
+              }
+
+              if (candidatoId) {
+                const result = await handleConsultarCandidato(candidatoId, authHeader);
+                res.statusCode = result.statusCode;
+                res.setHeader('Content-Type', 'application/json');
+                res.setHeader('Cache-Control', 'no-store');
+                res.end(JSON.stringify(result.data));
+                return;
+              }
+
+              const queryParams = {
+                nome: urlObj.searchParams.get('nome') || undefined,
+                email: urlObj.searchParams.get('email') || undefined,
+                telefone: urlObj.searchParams.get('telefone') || undefined,
+                cidade: urlObj.searchParams.get('cidade') || undefined,
+                estado: urlObj.searchParams.get('estado') || undefined,
+                lojaId: urlObj.searchParams.get('lojaId') || undefined,
+                cargo: urlObj.searchParams.get('cargo') || undefined,
+                status: urlObj.searchParams.get('status') || undefined,
+                origem: urlObj.searchParams.get('origem') || undefined,
+                page: urlObj.searchParams.get('page') ? Number(urlObj.searchParams.get('page')) : undefined,
+                limit: urlObj.searchParams.get('limit') ? Number(urlObj.searchParams.get('limit')) : undefined
+              };
+
+              const result = await handleListarCandidatos(queryParams, authHeader);
+              res.statusCode = result.statusCode;
+              res.setHeader('Content-Type', 'application/json');
+              res.setHeader('Cache-Control', 'no-store');
+              res.end(JSON.stringify(result.data));
+            } catch (err: any) {
+              res.statusCode = 500;
+              res.setHeader('Content-Type', 'application/json');
+              res.end(JSON.stringify({ success: false, error: err.message || 'Erro interno' }));
+            }
+            return;
+          }
+
+          let bodyStr = '';
+          req.on('data', (chunk) => {
+            bodyStr += chunk;
+          });
+          req.on('end', async () => {
+            try {
+              const body = JSON.parse(bodyStr || '{}');
+              let result: { statusCode: number; data: any };
+
+              if (req.method === 'POST') {
+                const acao = body.acao || urlObj.searchParams.get('acao');
+                if (acao === 'duplicidade' || acao === 'verificar_duplicidade') {
+                  result = await handleVerificarDuplicidade(body, authHeader);
+                } else if (acao === 'anexar_curriculo' || acao === 'curriculo') {
+                  result = await handleAnexarCurriculo(body, authHeader);
+                } else if (acao === 'vincular_loja' || acao === 'vincular') {
+                  result = await handleVincularCandidatoLoja(body, authHeader);
+                } else {
+                  result = await handleCriarCandidato(body, authHeader);
+                }
+              } else if (req.method === 'PATCH' || req.method === 'PUT') {
+                const targetId = candidatoId || body.candidatoId || body.id;
+                result = await handleEditarCandidato({ ...body, candidatoId: targetId }, authHeader);
+              } else {
+                res.statusCode = 405;
+                res.setHeader('Content-Type', 'application/json');
+                res.end(JSON.stringify({ success: false, error: 'Método não permitido' }));
+                return;
+              }
+
+              res.statusCode = result.statusCode;
+              res.setHeader('Content-Type', 'application/json');
+              res.end(JSON.stringify(result.data));
+            } catch (err: any) {
+              res.statusCode = 500;
+              res.setHeader('Content-Type', 'application/json');
+              res.end(JSON.stringify({ success: false, error: err.message || 'Erro interno' }));
+            }
+          });
+          return;
+        }
+
         // Rota de Ingestão de Candidaturas
         if (req.url?.startsWith('/api/candidaturas/enviar') && req.method === 'POST') {
           let bodyStr = '';
@@ -209,6 +434,43 @@ function candidaturasApiPlugin(): Plugin {
           });
           return;
         }
+
+        // Rota Healthcheck
+        if (req.url === '/health' || req.url === '/api/health') {
+          const { default: healthHandler } = await import(getApiModuleUrl('api/health.js'));
+          return healthHandler(req, res);
+        }
+
+        // Rota OAuth Metadata
+        if (req.url?.startsWith('/.well-known/oauth-authorization-server') || req.url?.startsWith('/.well-known/openid-configuration')) {
+          const { default: oauthMetadataHandler } = await import(getApiModuleUrl('api/oauth/metadata.js'));
+          return oauthMetadataHandler(req, res);
+        }
+
+        // Rotas OAuth
+        if (req.url?.startsWith('/oauth/authorize')) {
+          const { default: oauthAuthorizeHandler } = await import(getApiModuleUrl('api/oauth/authorize.js'));
+          return oauthAuthorizeHandler(req, res);
+        }
+        if (req.url?.startsWith('/oauth/token')) {
+          const { default: oauthTokenHandler } = await import(getApiModuleUrl('api/oauth/token.js'));
+          return oauthTokenHandler(req, res);
+        }
+        if (req.url?.startsWith('/oauth/userinfo')) {
+          const { default: oauthUserinfoHandler } = await import(getApiModuleUrl('api/oauth/userinfo.js'));
+          return oauthUserinfoHandler(req, res);
+        }
+        if (req.url?.startsWith('/oauth/revoke')) {
+          const { default: oauthRevokeHandler } = await import(getApiModuleUrl('api/oauth/revoke.js'));
+          return oauthRevokeHandler(req, res);
+        }
+
+        // Rota MCP Serverless Streamable HTTP
+        if (req.url === '/mcp' || req.url?.startsWith('/mcp?') || req.url?.startsWith('/mcp/') || req.url === '/api/mcp' || req.url?.startsWith('/api/mcp?') || req.url?.startsWith('/api/mcp/')) {
+          const { default: mcpHandler } = await import(getApiModuleUrl('api/mcp.js'));
+          return mcpHandler(req, res);
+        }
+
         next();
       });
     }
