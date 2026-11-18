@@ -5,27 +5,27 @@
   "rewrites": [
     {
       "source": "/.well-known/oauth-authorization-server",
-      "destination": "/api/oauth/metadata"
+      "destination": "/api/oauth"
     },
     {
       "source": "/.well-known/openid-configuration",
-      "destination": "/api/oauth/metadata"
+      "destination": "/api/oauth"
     },
     {
       "source": "/oauth/authorize",
-      "destination": "/api/oauth/authorize"
+      "destination": "/api/oauth"
     },
     {
       "source": "/oauth/token",
-      "destination": "/api/oauth/token"
+      "destination": "/api/oauth"
     },
     {
       "source": "/oauth/userinfo",
-      "destination": "/api/oauth/userinfo"
+      "destination": "/api/oauth"
     },
     {
       "source": "/oauth/revoke",
-      "destination": "/api/oauth/revoke"
+      "destination": "/api/oauth"
     },
     {
       "source": "/mcp",

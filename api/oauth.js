@@ -13,8 +13,27 @@ function signHmacPayload(type, payload, ttlSeconds) {
   const hmac = createHmac("sha256", secret).update(dataB64).digest("base64url");
   return `gig_${type}_${dataB64}.${hmac}`;
 }
+function verifyHmacPayload(token, expectedType) {
+  if (!token || !token.startsWith(`gig_${expectedType}_`)) return null;
+  const parts = token.slice(`gig_${expectedType}_`.length).split(".");
+  if (parts.length !== 2) return null;
+  const [dataB64, signature] = parts;
+  const secret = getSigningSecret();
+  const expectedHmac = createHmac("sha256", secret).update(dataB64).digest("base64url");
+  if (signature !== expectedHmac) return null;
+  try {
+    const jsonStr = Buffer.from(dataB64, "base64url").toString("utf-8");
+    const data = JSON.parse(jsonStr);
+    if (data.__typ !== expectedType) return null;
+    if (typeof data.__exp === "number" && data.__exp < Math.floor(Date.now() / 1e3)) return null;
+    return data;
+  } catch {
+    return null;
+  }
+}
 var authCodes = /* @__PURE__ */ new Map();
 var activeTokens = /* @__PURE__ */ new Map();
+var refreshTokens = /* @__PURE__ */ new Map();
 setInterval(() => {
   const now = Date.now();
   for (const [code, entry] of authCodes.entries()) {
@@ -94,6 +113,53 @@ async function authenticateOperator(email, password, existingToken) {
       supabaseSessionToken: sessionToken
     }
   };
+}
+async function resolveOAuthTokenContext(token) {
+  const cleanToken = token.replace(/^Bearer\s+/i, "").trim();
+  if (!cleanToken) return null;
+  const entry = activeTokens.get(cleanToken);
+  if (entry) {
+    if (entry.expiresAt > Date.now()) {
+      return entry.context;
+    }
+    activeTokens.delete(cleanToken);
+  }
+  const hmacData = verifyHmacPayload(cleanToken, "at");
+  if (hmacData && hmacData.context) {
+    return hmacData.context;
+  }
+  const auth = await authenticateOperator("", void 0, cleanToken);
+  if (auth.success && auth.context) {
+    return auth.context;
+  }
+  return null;
+}
+function verifyPkceS256(verifier, challenge) {
+  if (!verifier || !challenge) return false;
+  const hash = createHash("sha256").update(verifier).digest("base64url");
+  return hash === challenge;
+}
+function handleOAuthMetadata(req, res, issuerUrl) {
+  const metadata = {
+    issuer: issuerUrl,
+    authorization_endpoint: `${issuerUrl}/oauth/authorize`,
+    token_endpoint: `${issuerUrl}/oauth/token`,
+    revocation_endpoint: `${issuerUrl}/oauth/revoke`,
+    userinfo_endpoint: `${issuerUrl}/oauth/userinfo`,
+    jwks_uri: `${issuerUrl}/oauth/jwks`,
+    response_types_supported: ["code"],
+    grant_types_supported: ["authorization_code", "refresh_token"],
+    code_challenge_methods_supported: ["S256"],
+    token_endpoint_auth_methods_supported: ["none", "client_secret_post", "client_secret_basic"],
+    scopes_supported: ["openid", "profile", "email", "admin", "vagas:read", "vagas:write"],
+    service_documentation: `${issuerUrl}/health`
+  };
+  res.writeHead(200, {
+    "Content-Type": "application/json",
+    "Cache-Control": "public, max-age=3600",
+    "Access-Control-Allow-Origin": "*"
+  });
+  res.end(JSON.stringify(metadata, null, 2));
 }
 function renderAuthorizeHtml(params) {
   const errorHtml = params.errorMessage ? `<div style="background-color: #fee2e2; border-left: 4px solid #ef4444; color: #b91c1c; padding: 12px; margin-bottom: 20px; border-radius: 4px; font-size: 14px;">
@@ -297,11 +363,252 @@ async function handleOAuthAuthorize(req, res) {
     });
   }
 }
+async function handleOAuthToken(req, res) {
+  res.setHeader("Access-Control-Allow-Origin", "*");
+  res.setHeader("Access-Control-Allow-Methods", "POST, OPTIONS");
+  res.setHeader("Access-Control-Allow-Headers", "Content-Type, Authorization");
+  if (req.method === "OPTIONS") {
+    res.writeHead(204);
+    res.end();
+    return;
+  }
+  if (req.method !== "POST") {
+    res.writeHead(405, { "Content-Type": "application/json" });
+    res.end(JSON.stringify({ error: "method_not_allowed" }));
+    return;
+  }
+  let bodyStr = "";
+  req.on("data", (c) => {
+    bodyStr += c;
+  });
+  req.on("end", async () => {
+    let grantType = "";
+    let code = "";
+    let redirectUri = "";
+    let clientId = "";
+    let codeVerifier = "";
+    let refreshToken = "";
+    const contentType = req.headers["content-type"] || "";
+    if (contentType.includes("application/json")) {
+      try {
+        const body = JSON.parse(bodyStr || "{}");
+        grantType = body.grant_type;
+        code = body.code;
+        redirectUri = body.redirect_uri;
+        clientId = body.client_id;
+        codeVerifier = body.code_verifier;
+        refreshToken = body.refresh_token;
+      } catch {
+      }
+    } else {
+      const formData = new URLSearchParams(bodyStr);
+      grantType = formData.get("grant_type") || "";
+      code = formData.get("code") || "";
+      redirectUri = formData.get("redirect_uri") || "";
+      clientId = formData.get("client_id") || "";
+      codeVerifier = formData.get("code_verifier") || "";
+      refreshToken = formData.get("refresh_token") || "";
+    }
+    if (grantType === "authorization_code") {
+      if (!code) {
+        res.writeHead(400, { "Content-Type": "application/json" });
+        res.end(JSON.stringify({ error: "invalid_request", error_description: "Par\xE2metro code ausente." }));
+        return;
+      }
+      let entry = authCodes.get(code);
+      if (entry) {
+        authCodes.delete(code);
+      } else {
+        const hmacCode = verifyHmacPayload(code, "code");
+        if (hmacCode) {
+          entry = {
+            code,
+            clientId: hmacCode.clientId,
+            redirectUri: hmacCode.redirectUri,
+            codeChallenge: hmacCode.codeChallenge,
+            codeChallengeMethod: "S256",
+            scope: hmacCode.scope,
+            context: hmacCode.context,
+            expiresAt: hmacCode.__exp * 1e3
+          };
+        }
+      }
+      if (!entry) {
+        res.writeHead(400, { "Content-Type": "application/json" });
+        res.end(JSON.stringify({ error: "invalid_grant", error_description: "C\xF3digo de autoriza\xE7\xE3o inv\xE1lido ou j\xE1 utilizado." }));
+        return;
+      }
+      if (entry.expiresAt <= Date.now()) {
+        res.writeHead(400, { "Content-Type": "application/json" });
+        res.end(JSON.stringify({ error: "invalid_grant", error_description: "C\xF3digo de autoriza\xE7\xE3o expirado." }));
+        return;
+      }
+      if (entry.codeChallenge) {
+        const pkceValid = verifyPkceS256(codeVerifier, entry.codeChallenge);
+        if (!pkceValid) {
+          res.writeHead(400, { "Content-Type": "application/json" });
+          res.end(JSON.stringify({ error: "invalid_grant", error_description: "PKCE verification failed: code_verifier incompat\xEDvel." }));
+          return;
+        }
+      }
+      const expiresIn = 3600;
+      const tokenPayload = {
+        clientId: entry.clientId,
+        context: entry.context,
+        scope: entry.scope
+      };
+      const accessToken = signHmacPayload("at", tokenPayload, expiresIn);
+      const newRefreshToken = signHmacPayload("rt", tokenPayload, 30 * 86400);
+      const expiresAt = Date.now() + expiresIn * 1e3;
+      const tokenRecord = {
+        accessToken,
+        refreshToken: newRefreshToken,
+        clientId: entry.clientId,
+        context: entry.context,
+        scope: entry.scope,
+        expiresAt
+      };
+      activeTokens.set(accessToken, tokenRecord);
+      refreshTokens.set(newRefreshToken, tokenRecord);
+      res.writeHead(200, {
+        "Content-Type": "application/json",
+        "Cache-Control": "no-store",
+        "Pragma": "no-cache"
+      });
+      res.end(JSON.stringify({
+        access_token: accessToken,
+        token_type: "Bearer",
+        expires_in: expiresIn,
+        refresh_token: newRefreshToken,
+        scope: entry.scope
+      }));
+      return;
+    }
+    if (grantType === "refresh_token") {
+      if (!refreshToken) {
+        res.writeHead(400, { "Content-Type": "application/json" });
+        res.end(JSON.stringify({ error: "invalid_request", error_description: "Par\xE2metro refresh_token ausente." }));
+        return;
+      }
+      const existingRecord = refreshTokens.get(refreshToken);
+      if (!existingRecord) {
+        res.writeHead(400, { "Content-Type": "application/json" });
+        res.end(JSON.stringify({ error: "invalid_grant", error_description: "Refresh token inv\xE1lido ou revogado." }));
+        return;
+      }
+      refreshTokens.delete(refreshToken);
+      activeTokens.delete(existingRecord.accessToken);
+      const newAccessToken = `gigante_mcp_at_${randomBytes(32).toString("base64url")}`;
+      const newRefreshToken = `gigante_mcp_rt_${randomBytes(32).toString("base64url")}`;
+      const expiresIn = 3600;
+      const expiresAt = Date.now() + expiresIn * 1e3;
+      const newRecord = {
+        accessToken: newAccessToken,
+        refreshToken: newRefreshToken,
+        clientId: existingRecord.clientId,
+        context: existingRecord.context,
+        scope: existingRecord.scope,
+        expiresAt
+      };
+      activeTokens.set(newAccessToken, newRecord);
+      refreshTokens.set(newRefreshToken, newRecord);
+      res.writeHead(200, {
+        "Content-Type": "application/json",
+        "Cache-Control": "no-store"
+      });
+      res.end(JSON.stringify({
+        access_token: newAccessToken,
+        token_type: "Bearer",
+        expires_in: expiresIn,
+        refresh_token: newRefreshToken,
+        scope: existingRecord.scope
+      }));
+      return;
+    }
+    res.writeHead(400, { "Content-Type": "application/json" });
+    res.end(JSON.stringify({ error: "unsupported_grant_type", error_description: "Use authorization_code ou refresh_token." }));
+  });
+}
+function handleOAuthRevoke(req, res) {
+  res.setHeader("Access-Control-Allow-Origin", "*");
+  res.setHeader("Access-Control-Allow-Methods", "POST, OPTIONS");
+  res.setHeader("Access-Control-Allow-Headers", "Content-Type, Authorization");
+  if (req.method === "OPTIONS") {
+    res.writeHead(204);
+    res.end();
+    return;
+  }
+  let bodyStr = "";
+  req.on("data", (c) => {
+    bodyStr += c;
+  });
+  req.on("end", () => {
+    let tokenToRevoke = "";
+    const contentType = req.headers["content-type"] || "";
+    if (contentType.includes("application/json")) {
+      try {
+        tokenToRevoke = JSON.parse(bodyStr || "{}").token;
+      } catch {
+      }
+    } else {
+      const formData = new URLSearchParams(bodyStr);
+      tokenToRevoke = formData.get("token") || "";
+    }
+    if (tokenToRevoke) {
+      activeTokens.delete(tokenToRevoke);
+      refreshTokens.delete(tokenToRevoke);
+    }
+    res.writeHead(200, { "Content-Type": "application/json" });
+    res.end(JSON.stringify({ success: true, message: "Token revogado com sucesso." }));
+  });
+}
+async function handleOAuthUserinfo(req, res) {
+  res.setHeader("Access-Control-Allow-Origin", "*");
+  res.setHeader("Access-Control-Allow-Headers", "Authorization");
+  const authHeader = req.headers["authorization"] || "";
+  const token = authHeader.replace(/^Bearer\s+/i, "").trim();
+  const context = await resolveOAuthTokenContext(token);
+  if (!context) {
+    res.writeHead(401, { "Content-Type": "application/json" });
+    res.end(JSON.stringify({ error: "invalid_token", error_description: "Token inv\xE1lido ou expirado." }));
+    return;
+  }
+  res.writeHead(200, { "Content-Type": "application/json" });
+  res.end(JSON.stringify({
+    sub: context.userId,
+    email: context.email,
+    name: context.nome,
+    role: context.role,
+    is_master: context.isMasterOrRh,
+    lojas_autorizadas: context.lojasAutorizadasIds,
+    aud: "gigante-pneus-mcp"
+  }, null, 2));
+}
 
-// src-api/oauth/authorize.ts
-async function oauthAuthorizeHandler(req, res) {
-  return handleOAuthAuthorize(req, res);
+// src-api/oauth.ts
+async function oauthRouterHandler(req, res) {
+  const url = req.url || "";
+  const pathname = url.split("?")[0];
+  const host = req.headers["x-forwarded-host"] || req.headers["host"] || "trabalheconosco.gigantepneus.com.br";
+  const proto = req.headers["x-forwarded-proto"] || (host.includes("localhost") ? "http" : "https");
+  const issuerUrl = `${proto}://${host}`;
+  if (pathname.includes("/.well-known/") || pathname.endsWith("/metadata")) {
+    return handleOAuthMetadata(req, res, issuerUrl);
+  }
+  if (pathname.endsWith("/authorize")) {
+    return handleOAuthAuthorize(req, res);
+  }
+  if (pathname.endsWith("/token")) {
+    return handleOAuthToken(req, res);
+  }
+  if (pathname.endsWith("/userinfo")) {
+    return handleOAuthUserinfo(req, res);
+  }
+  if (pathname.endsWith("/revoke")) {
+    return handleOAuthRevoke(req, res);
+  }
+  return handleOAuthMetadata(req, res, issuerUrl);
 }
 export {
-  oauthAuthorizeHandler as default
+  oauthRouterHandler as default
 };

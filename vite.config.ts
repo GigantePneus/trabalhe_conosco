@@ -441,28 +441,14 @@ function candidaturasApiPlugin(): Plugin {
           return healthHandler(req, res);
         }
 
-        // Rota OAuth Metadata
-        if (req.url?.startsWith('/.well-known/oauth-authorization-server') || req.url?.startsWith('/.well-known/openid-configuration')) {
-          const { default: oauthMetadataHandler } = await import(getApiModuleUrl('api/oauth/metadata.js'));
-          return oauthMetadataHandler(req, res);
-        }
-
-        // Rotas OAuth
-        if (req.url?.startsWith('/oauth/authorize')) {
-          const { default: oauthAuthorizeHandler } = await import(getApiModuleUrl('api/oauth/authorize.js'));
-          return oauthAuthorizeHandler(req, res);
-        }
-        if (req.url?.startsWith('/oauth/token')) {
-          const { default: oauthTokenHandler } = await import(getApiModuleUrl('api/oauth/token.js'));
-          return oauthTokenHandler(req, res);
-        }
-        if (req.url?.startsWith('/oauth/userinfo')) {
-          const { default: oauthUserinfoHandler } = await import(getApiModuleUrl('api/oauth/userinfo.js'));
-          return oauthUserinfoHandler(req, res);
-        }
-        if (req.url?.startsWith('/oauth/revoke')) {
-          const { default: oauthRevokeHandler } = await import(getApiModuleUrl('api/oauth/revoke.js'));
-          return oauthRevokeHandler(req, res);
+        // Rotas OAuth 2.1 e Metadata RFC 8414
+        if (
+          req.url?.startsWith('/.well-known/oauth-authorization-server') ||
+          req.url?.startsWith('/.well-known/openid-configuration') ||
+          req.url?.startsWith('/oauth/')
+        ) {
+          const { default: oauthRouterHandler } = await import(getApiModuleUrl('api/oauth.js'));
+          return oauthRouterHandler(req, res);
         }
 
         // Rota MCP Serverless Streamable HTTP

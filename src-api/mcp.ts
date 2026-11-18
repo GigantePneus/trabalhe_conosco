@@ -14,6 +14,21 @@ export default async function mcpServerlessHandler(req: any, res: any) {
     return;
   }
 
+  const pathname = (req.url || '').split('?')[0];
+  if (pathname.endsWith('/health') && req.method === 'GET') {
+    res.setHeader('Content-Type', 'application/json');
+    res.setHeader('Cache-Control', 'no-store');
+    res.statusCode = 200;
+    res.end(JSON.stringify({
+      status: 'ok',
+      service: 'gigante-pneus-mcp-remote',
+      protocol: 'streamable-http',
+      version: '1.2.0',
+      timestamp: new Date().toISOString()
+    }));
+    return;
+  }
+
   // Normalização universal do cabeçalho Accept para compatibilidade com ChatGPT
   const rawAccept = req.headers['accept'] || '';
   if (!rawAccept.includes('application/json') || !rawAccept.includes('text/event-stream')) {
