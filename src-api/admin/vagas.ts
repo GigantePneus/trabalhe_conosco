@@ -1041,14 +1041,27 @@ export default async function vercelAdminVagasHandler(req: any, res: any) {
   const token = authHeader.startsWith('Bearer ') ? authHeader.slice(7) : null;
 
   try {
-    // 1. GET: Listar ou Consultar vaga específica
+    // 1. GET: Listar ou Consultar vaga específica (ou listar lojas)
     if (req.method === 'GET') {
       const url = new URL(req.url, 'http://localhost');
+
+      // Suporte unificado para listar_lojas
+      if (url.pathname.endsWith('/lojas') || url.searchParams.has('lojas')) {
+        const result = await handleListarLojas(token);
+        res.statusCode = result.statusCode;
+        res.setHeader('Content-Type', 'application/json');
+        res.end(JSON.stringify(result.data));
+        return;
+      }
+
       const vagaId = url.searchParams.get('id');
 
       if (vagaId) {
         const result = await handleConsultarVaga(vagaId, token);
-        return res.status(result.statusCode).json(result.data);
+        res.statusCode = result.statusCode;
+        res.setHeader('Content-Type', 'application/json');
+        res.end(JSON.stringify(result.data));
+        return;
       }
 
       const filtros: ListarVagasFiltros = {
@@ -1062,7 +1075,10 @@ export default async function vercelAdminVagasHandler(req: any, res: any) {
       };
 
       const result = await handleListarVagas(filtros, token);
-      return res.status(result.statusCode).json(result.data);
+      res.statusCode = result.statusCode;
+      res.setHeader('Content-Type', 'application/json');
+      res.end(JSON.stringify(result.data));
+      return;
     }
 
     // 2. POST: Criar nova vaga

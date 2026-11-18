@@ -636,10 +636,20 @@ async function vercelAdminVagasHandler(req, res) {
   try {
     if (req.method === "GET") {
       const url = new URL(req.url, "http://localhost");
+      if (url.pathname.endsWith("/lojas") || url.searchParams.has("lojas")) {
+        const result2 = await handleListarLojas(token);
+        res.statusCode = result2.statusCode;
+        res.setHeader("Content-Type", "application/json");
+        res.end(JSON.stringify(result2.data));
+        return;
+      }
       const vagaId = url.searchParams.get("id");
       if (vagaId) {
         const result2 = await handleConsultarVaga(vagaId, token);
-        return res.status(result2.statusCode).json(result2.data);
+        res.statusCode = result2.statusCode;
+        res.setHeader("Content-Type", "application/json");
+        res.end(JSON.stringify(result2.data));
+        return;
       }
       const filtros = {
         lojaId: url.searchParams.get("lojaId") || void 0,
@@ -651,7 +661,10 @@ async function vercelAdminVagasHandler(req, res) {
         limit: url.searchParams.get("limit") ? Number(url.searchParams.get("limit")) : 20
       };
       const result = await handleListarVagas(filtros, token);
-      return res.status(result.statusCode).json(result.data);
+      res.statusCode = result.statusCode;
+      res.setHeader("Content-Type", "application/json");
+      res.end(JSON.stringify(result.data));
+      return;
     }
     if (req.method === "POST") {
       const body = typeof req.body === "string" ? JSON.parse(req.body) : req.body;

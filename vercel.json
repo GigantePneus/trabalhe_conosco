@@ -36,6 +36,10 @@
       "destination": "/api/health"
     },
     {
+      "source": "/api/admin/lojas",
+      "destination": "/api/admin/vagas?lojas=1"
+    },
+    {
       "source": "/api/:path*",
       "destination": "/api/:path*"
     },
