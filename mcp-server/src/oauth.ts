@@ -247,6 +247,28 @@ export function verifyPkceS256(verifier: string, challenge: string): boolean {
   return hash === challenge;
 }
 
+export async function getRequestBody(req: any): Promise<string> {
+  if (req.body !== undefined && req.body !== null) {
+    if (typeof req.body === 'string') return req.body;
+    if (typeof req.body === 'object') {
+      const contentType = req.headers['content-type'] || '';
+      if (contentType.includes('application/x-www-form-urlencoded')) {
+        return new URLSearchParams(req.body).toString();
+      }
+      return JSON.stringify(req.body);
+    }
+  }
+  return new Promise((resolve) => {
+    let bodyStr = '';
+    req.on('data', (c: any) => { bodyStr += c; });
+    req.on('end', () => resolve(bodyStr));
+    req.on('error', () => resolve(''));
+    if (req.readableEnded) {
+      resolve(bodyStr);
+    }
+  });
+}
+
 // ─── Handlers de Rotas OAuth 2.1 ───────────────────────────────────────────────
 
 /**
@@ -400,122 +422,119 @@ export async function handleOAuthAuthorize(req: any, res: any) {
 
   // Se POST: processa login do operador
   if (req.method === 'POST') {
-    let bodyStr = '';
-    req.on('data', (c: any) => { bodyStr += c; });
-    req.on('end', async () => {
-      let email = '';
-      let password = '';
-      let sessionToken = '';
-      let clientId = '';
-      let redirectUri = '';
-      let state = '';
-      let scope = '';
-      let codeChallenge = '';
-      let codeChallengeMethod = 'S256';
+    const bodyStr = await getRequestBody(req);
+    let email = '';
+    let password = '';
+    let sessionToken = '';
+    let clientId = '';
+    let redirectUri = '';
+    let state = '';
+    let scope = '';
+    let codeChallenge = '';
+    let codeChallengeMethod = 'S256';
 
-      // Suporta x-www-form-urlencoded ou JSON
-      const contentType = req.headers['content-type'] || '';
+    // Suporta x-www-form-urlencoded ou JSON
+    const contentType = req.headers['content-type'] || '';
+    if (contentType.includes('application/json')) {
+      try {
+        const body = JSON.parse(bodyStr || '{}');
+        email = body.email;
+        password = body.password;
+        sessionToken = body.session_token || '';
+        clientId = body.client_id || 'chatgpt-client';
+        redirectUri = body.redirect_uri || '';
+        state = body.state || '';
+        scope = body.scope || 'admin';
+        codeChallenge = body.code_challenge || '';
+        codeChallengeMethod = body.code_challenge_method || 'S256';
+      } catch {}
+    } else {
+      const formData = new URLSearchParams(bodyStr);
+      email = formData.get('email') || '';
+      password = formData.get('password') || '';
+      sessionToken = formData.get('session_token') || '';
+      clientId = formData.get('client_id') || 'chatgpt-client';
+      redirectUri = decodeURIComponent(formData.get('redirect_uri') || '');
+      state = formData.get('state') || '';
+      scope = formData.get('scope') || 'admin';
+      codeChallenge = formData.get('code_challenge') || '';
+      codeChallengeMethod = formData.get('code_challenge_method') || 'S256';
+    }
+
+    // Validação das credenciais do operador (senha ou sessão prévia)
+    const auth = await authenticateOperator(email, password, sessionToken);
+
+    if (!auth.success || !auth.context) {
+      // Se a requisição veio de API JSON
       if (contentType.includes('application/json')) {
-        try {
-          const body = JSON.parse(bodyStr || '{}');
-          email = body.email;
-          password = body.password;
-          sessionToken = body.session_token || '';
-          clientId = body.client_id || 'chatgpt-client';
-          redirectUri = body.redirect_uri || '';
-          state = body.state || '';
-          scope = body.scope || 'admin';
-          codeChallenge = body.code_challenge || '';
-          codeChallengeMethod = body.code_challenge_method || 'S256';
-        } catch {}
-      } else {
-        const formData = new URLSearchParams(bodyStr);
-        email = formData.get('email') || '';
-        password = formData.get('password') || '';
-        sessionToken = formData.get('session_token') || '';
-        clientId = formData.get('client_id') || 'chatgpt-client';
-        redirectUri = decodeURIComponent(formData.get('redirect_uri') || '');
-        state = formData.get('state') || '';
-        scope = formData.get('scope') || 'admin';
-        codeChallenge = formData.get('code_challenge') || '';
-        codeChallengeMethod = formData.get('code_challenge_method') || 'S256';
-      }
-
-      // Validação das credenciais do operador (senha ou sessão prévia)
-      const auth = await authenticateOperator(email, password, sessionToken);
-
-      if (!auth.success || !auth.context) {
-        // Se a requisição veio de API JSON
-        if (contentType.includes('application/json')) {
-          res.writeHead(401, { 'Content-Type': 'application/json' });
-          res.end(JSON.stringify({ error: 'access_denied', error_description: auth.error || 'Credenciais inválidas' }));
-          return;
-        }
-
-        // Se veio de formulário HTML, exibe mensagem de erro
-        const html = renderAuthorizeHtml({
-          clientId,
-          redirectUri,
-          state,
-          scope,
-          codeChallenge,
-          codeChallengeMethod,
-          errorMessage: auth.error
-        });
-        res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' });
-        res.end(html);
+        res.writeHead(401, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ error: 'access_denied', error_description: auth.error || 'Credenciais inválidas' }));
         return;
       }
 
-      // Gera código de autorização assinado (stateless com HMAC para suporte a Serverless)
-      const codePayload = {
+      // Se veio de formulário HTML, exibe mensagem de erro
+      const html = renderAuthorizeHtml({
         clientId,
         redirectUri,
-        codeChallenge,
-        codeChallengeMethod: 'S256' as const,
+        state,
         scope,
-        context: auth.context
-      };
-      const code = signHmacPayload('code', codePayload, 300); // 5 min
-      const expiresAt = Date.now() + 5 * 60 * 1000;
-
-      authCodes.set(code, {
-        ...codePayload,
-        code,
-        expiresAt
+        codeChallenge,
+        codeChallengeMethod,
+        errorMessage: auth.error
       });
+      res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' });
+      res.end(html);
+      return;
+    }
 
-      // Se for chamada JSON, responde diretamente com o redirecionamento
-      if (contentType.includes('application/json')) {
-        const targetUrl = new URL(redirectUri || 'http://localhost');
-        targetUrl.searchParams.set('code', code);
-        if (state) targetUrl.searchParams.set('state', state);
+    // Gera código de autorização assinado (stateless com HMAC para suporte a Serverless)
+    const codePayload = {
+      clientId,
+      redirectUri,
+      codeChallenge,
+      codeChallengeMethod: 'S256' as const,
+      scope,
+      context: auth.context
+    };
+    const code = signHmacPayload('code', codePayload, 300); // 5 min
+    const expiresAt = Date.now() + 5 * 60 * 1000;
 
-        res.writeHead(200, { 'Content-Type': 'application/json' });
-        res.end(JSON.stringify({
-          success: true,
-          code,
-          state,
-          redirect_url: targetUrl.toString()
-        }));
-        return;
-      }
-
-      // Redireciona o navegador de volta ao ChatGPT com o código e state
-      if (redirectUri) {
-        const targetUrl = new URL(redirectUri);
-        targetUrl.searchParams.set('code', code);
-        if (state) targetUrl.searchParams.set('state', state);
-
-        res.writeHead(302, { Location: targetUrl.toString() });
-        res.end();
-        return;
-      }
-
-      // Se redirectUri não foi fornecido (fallback de exibição)
-      res.writeHead(200, { 'Content-Type': 'application/json' });
-      res.end(JSON.stringify({ code, state }));
+    authCodes.set(code, {
+      ...codePayload,
+      code,
+      expiresAt
     });
+
+    // Se for chamada JSON, responde diretamente com o redirecionamento
+    if (contentType.includes('application/json')) {
+      const targetUrl = new URL(redirectUri || 'http://localhost');
+      targetUrl.searchParams.set('code', code);
+      if (state) targetUrl.searchParams.set('state', state);
+
+      res.writeHead(200, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({
+        success: true,
+        code,
+        state,
+        redirect_url: targetUrl.toString()
+      }));
+      return;
+    }
+
+    // Redireciona o navegador de volta ao ChatGPT com o código e state
+    if (redirectUri) {
+      const targetUrl = new URL(redirectUri);
+      targetUrl.searchParams.set('code', code);
+      if (state) targetUrl.searchParams.set('state', state);
+
+      res.writeHead(302, { Location: targetUrl.toString() });
+      res.end();
+      return;
+    }
+
+    // Se redirectUri não foi fornecido (fallback de exibição)
+    res.writeHead(200, { 'Content-Type': 'application/json' });
+    res.end(JSON.stringify({ code, state }));
   }
 }
 
@@ -539,10 +558,8 @@ export async function handleOAuthToken(req: any, res: any) {
     return;
   }
 
-  let bodyStr = '';
-  req.on('data', (c: any) => { bodyStr += c; });
-  req.on('end', async () => {
-    let grantType = '';
+  const bodyStr = await getRequestBody(req);
+  let grantType = '';
     let code = '';
     let redirectUri = '';
     let clientId = '';
@@ -710,13 +727,12 @@ export async function handleOAuthToken(req: any, res: any) {
 
     res.writeHead(400, { 'Content-Type': 'application/json' });
     res.end(JSON.stringify({ error: 'unsupported_grant_type', error_description: 'Use authorization_code ou refresh_token.' }));
-  });
 }
 
 /**
  * 5. POST /oauth/revoke - Revogação de Tokens (RFC 7009)
  */
-export function handleOAuthRevoke(req: any, res: any) {
+export async function handleOAuthRevoke(req: any, res: any) {
   res.setHeader('Access-Control-Allow-Origin', '*');
   res.setHeader('Access-Control-Allow-Methods', 'POST, OPTIONS');
   res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization');
@@ -727,29 +743,26 @@ export function handleOAuthRevoke(req: any, res: any) {
     return;
   }
 
-  let bodyStr = '';
-  req.on('data', (c: any) => { bodyStr += c; });
-  req.on('end', () => {
-    let tokenToRevoke = '';
-    const contentType = req.headers['content-type'] || '';
-    if (contentType.includes('application/json')) {
-      try {
-        tokenToRevoke = JSON.parse(bodyStr || '{}').token;
-      } catch {}
-    } else {
-      const formData = new URLSearchParams(bodyStr);
-      tokenToRevoke = formData.get('token') || '';
-    }
+  const bodyStr = await getRequestBody(req);
+  let tokenToRevoke = '';
+  const contentType = req.headers['content-type'] || '';
+  if (contentType.includes('application/json')) {
+    try {
+      tokenToRevoke = JSON.parse(bodyStr || '{}').token;
+    } catch {}
+  } else {
+    const formData = new URLSearchParams(bodyStr);
+    tokenToRevoke = formData.get('token') || '';
+  }
 
-    if (tokenToRevoke) {
-      activeTokens.delete(tokenToRevoke);
-      refreshTokens.delete(tokenToRevoke);
-    }
+  if (tokenToRevoke) {
+    activeTokens.delete(tokenToRevoke);
+    refreshTokens.delete(tokenToRevoke);
+  }
 
-    // RFC 7009 especifica retorno 200 mesmo se o token já era inválido
-    res.writeHead(200, { 'Content-Type': 'application/json' });
-    res.end(JSON.stringify({ success: true, message: 'Token revogado com sucesso.' }));
-  });
+  // RFC 7009 especifica retorno 200 mesmo se o token já era inválido
+  res.writeHead(200, { 'Content-Type': 'application/json' });
+  res.end(JSON.stringify({ success: true, message: 'Token revogado com sucesso.' }));
 }
 
 /**

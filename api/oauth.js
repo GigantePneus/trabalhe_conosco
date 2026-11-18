@@ -139,6 +139,29 @@ function verifyPkceS256(verifier, challenge) {
   const hash = createHash("sha256").update(verifier).digest("base64url");
   return hash === challenge;
 }
+async function getRequestBody(req) {
+  if (req.body !== void 0 && req.body !== null) {
+    if (typeof req.body === "string") return req.body;
+    if (typeof req.body === "object") {
+      const contentType = req.headers["content-type"] || "";
+      if (contentType.includes("application/x-www-form-urlencoded")) {
+        return new URLSearchParams(req.body).toString();
+      }
+      return JSON.stringify(req.body);
+    }
+  }
+  return new Promise((resolve) => {
+    let bodyStr = "";
+    req.on("data", (c) => {
+      bodyStr += c;
+    });
+    req.on("end", () => resolve(bodyStr));
+    req.on("error", () => resolve(""));
+    if (req.readableEnded) {
+      resolve(bodyStr);
+    }
+  });
+}
 function handleOAuthMetadata(req, res, issuerUrl) {
   const metadata = {
     issuer: issuerUrl,
@@ -261,106 +284,101 @@ async function handleOAuthAuthorize(req, res) {
     return;
   }
   if (req.method === "POST") {
-    let bodyStr = "";
-    req.on("data", (c) => {
-      bodyStr += c;
-    });
-    req.on("end", async () => {
-      let email = "";
-      let password = "";
-      let sessionToken = "";
-      let clientId = "";
-      let redirectUri = "";
-      let state = "";
-      let scope = "";
-      let codeChallenge = "";
-      let codeChallengeMethod = "S256";
-      const contentType = req.headers["content-type"] || "";
-      if (contentType.includes("application/json")) {
-        try {
-          const body = JSON.parse(bodyStr || "{}");
-          email = body.email;
-          password = body.password;
-          sessionToken = body.session_token || "";
-          clientId = body.client_id || "chatgpt-client";
-          redirectUri = body.redirect_uri || "";
-          state = body.state || "";
-          scope = body.scope || "admin";
-          codeChallenge = body.code_challenge || "";
-          codeChallengeMethod = body.code_challenge_method || "S256";
-        } catch {
-        }
-      } else {
-        const formData = new URLSearchParams(bodyStr);
-        email = formData.get("email") || "";
-        password = formData.get("password") || "";
-        sessionToken = formData.get("session_token") || "";
-        clientId = formData.get("client_id") || "chatgpt-client";
-        redirectUri = decodeURIComponent(formData.get("redirect_uri") || "");
-        state = formData.get("state") || "";
-        scope = formData.get("scope") || "admin";
-        codeChallenge = formData.get("code_challenge") || "";
-        codeChallengeMethod = formData.get("code_challenge_method") || "S256";
+    const bodyStr = await getRequestBody(req);
+    let email = "";
+    let password = "";
+    let sessionToken = "";
+    let clientId = "";
+    let redirectUri = "";
+    let state = "";
+    let scope = "";
+    let codeChallenge = "";
+    let codeChallengeMethod = "S256";
+    const contentType = req.headers["content-type"] || "";
+    if (contentType.includes("application/json")) {
+      try {
+        const body = JSON.parse(bodyStr || "{}");
+        email = body.email;
+        password = body.password;
+        sessionToken = body.session_token || "";
+        clientId = body.client_id || "chatgpt-client";
+        redirectUri = body.redirect_uri || "";
+        state = body.state || "";
+        scope = body.scope || "admin";
+        codeChallenge = body.code_challenge || "";
+        codeChallengeMethod = body.code_challenge_method || "S256";
+      } catch {
       }
-      const auth = await authenticateOperator(email, password, sessionToken);
-      if (!auth.success || !auth.context) {
-        if (contentType.includes("application/json")) {
-          res.writeHead(401, { "Content-Type": "application/json" });
-          res.end(JSON.stringify({ error: "access_denied", error_description: auth.error || "Credenciais inv\xE1lidas" }));
-          return;
-        }
-        const html = renderAuthorizeHtml({
-          clientId,
-          redirectUri,
-          state,
-          scope,
-          codeChallenge,
-          codeChallengeMethod,
-          errorMessage: auth.error
-        });
-        res.writeHead(200, { "Content-Type": "text/html; charset=utf-8" });
-        res.end(html);
+    } else {
+      const formData = new URLSearchParams(bodyStr);
+      email = formData.get("email") || "";
+      password = formData.get("password") || "";
+      sessionToken = formData.get("session_token") || "";
+      clientId = formData.get("client_id") || "chatgpt-client";
+      redirectUri = decodeURIComponent(formData.get("redirect_uri") || "");
+      state = formData.get("state") || "";
+      scope = formData.get("scope") || "admin";
+      codeChallenge = formData.get("code_challenge") || "";
+      codeChallengeMethod = formData.get("code_challenge_method") || "S256";
+    }
+    const auth = await authenticateOperator(email, password, sessionToken);
+    if (!auth.success || !auth.context) {
+      if (contentType.includes("application/json")) {
+        res.writeHead(401, { "Content-Type": "application/json" });
+        res.end(JSON.stringify({ error: "access_denied", error_description: auth.error || "Credenciais inv\xE1lidas" }));
         return;
       }
-      const codePayload = {
+      const html = renderAuthorizeHtml({
         clientId,
         redirectUri,
-        codeChallenge,
-        codeChallengeMethod: "S256",
+        state,
         scope,
-        context: auth.context
-      };
-      const code = signHmacPayload("code", codePayload, 300);
-      const expiresAt = Date.now() + 5 * 60 * 1e3;
-      authCodes.set(code, {
-        ...codePayload,
-        code,
-        expiresAt
+        codeChallenge,
+        codeChallengeMethod,
+        errorMessage: auth.error
       });
-      if (contentType.includes("application/json")) {
-        const targetUrl = new URL(redirectUri || "http://localhost");
-        targetUrl.searchParams.set("code", code);
-        if (state) targetUrl.searchParams.set("state", state);
-        res.writeHead(200, { "Content-Type": "application/json" });
-        res.end(JSON.stringify({
-          success: true,
-          code,
-          state,
-          redirect_url: targetUrl.toString()
-        }));
-        return;
-      }
-      if (redirectUri) {
-        const targetUrl = new URL(redirectUri);
-        targetUrl.searchParams.set("code", code);
-        if (state) targetUrl.searchParams.set("state", state);
-        res.writeHead(302, { Location: targetUrl.toString() });
-        res.end();
-        return;
-      }
-      res.writeHead(200, { "Content-Type": "application/json" });
-      res.end(JSON.stringify({ code, state }));
+      res.writeHead(200, { "Content-Type": "text/html; charset=utf-8" });
+      res.end(html);
+      return;
+    }
+    const codePayload = {
+      clientId,
+      redirectUri,
+      codeChallenge,
+      codeChallengeMethod: "S256",
+      scope,
+      context: auth.context
+    };
+    const code = signHmacPayload("code", codePayload, 300);
+    const expiresAt = Date.now() + 5 * 60 * 1e3;
+    authCodes.set(code, {
+      ...codePayload,
+      code,
+      expiresAt
     });
+    if (contentType.includes("application/json")) {
+      const targetUrl = new URL(redirectUri || "http://localhost");
+      targetUrl.searchParams.set("code", code);
+      if (state) targetUrl.searchParams.set("state", state);
+      res.writeHead(200, { "Content-Type": "application/json" });
+      res.end(JSON.stringify({
+        success: true,
+        code,
+        state,
+        redirect_url: targetUrl.toString()
+      }));
+      return;
+    }
+    if (redirectUri) {
+      const targetUrl = new URL(redirectUri);
+      targetUrl.searchParams.set("code", code);
+      if (state) targetUrl.searchParams.set("state", state);
+      res.writeHead(302, { Location: targetUrl.toString() });
+      res.end();
+      return;
+    }
+    res.writeHead(200, { "Content-Type": "application/json" });
+    res.end(JSON.stringify({ code, state }));
   }
 }
 async function handleOAuthToken(req, res) {
@@ -377,159 +395,154 @@ async function handleOAuthToken(req, res) {
     res.end(JSON.stringify({ error: "method_not_allowed" }));
     return;
   }
-  let bodyStr = "";
-  req.on("data", (c) => {
-    bodyStr += c;
-  });
-  req.on("end", async () => {
-    let grantType = "";
-    let code = "";
-    let redirectUri = "";
-    let clientId = "";
-    let codeVerifier = "";
-    let refreshToken = "";
-    const contentType = req.headers["content-type"] || "";
-    if (contentType.includes("application/json")) {
-      try {
-        const body = JSON.parse(bodyStr || "{}");
-        grantType = body.grant_type;
-        code = body.code;
-        redirectUri = body.redirect_uri;
-        clientId = body.client_id;
-        codeVerifier = body.code_verifier;
-        refreshToken = body.refresh_token;
-      } catch {
-      }
+  const bodyStr = await getRequestBody(req);
+  let grantType = "";
+  let code = "";
+  let redirectUri = "";
+  let clientId = "";
+  let codeVerifier = "";
+  let refreshToken = "";
+  const contentType = req.headers["content-type"] || "";
+  if (contentType.includes("application/json")) {
+    try {
+      const body = JSON.parse(bodyStr || "{}");
+      grantType = body.grant_type;
+      code = body.code;
+      redirectUri = body.redirect_uri;
+      clientId = body.client_id;
+      codeVerifier = body.code_verifier;
+      refreshToken = body.refresh_token;
+    } catch {
+    }
+  } else {
+    const formData = new URLSearchParams(bodyStr);
+    grantType = formData.get("grant_type") || "";
+    code = formData.get("code") || "";
+    redirectUri = formData.get("redirect_uri") || "";
+    clientId = formData.get("client_id") || "";
+    codeVerifier = formData.get("code_verifier") || "";
+    refreshToken = formData.get("refresh_token") || "";
+  }
+  if (grantType === "authorization_code") {
+    if (!code) {
+      res.writeHead(400, { "Content-Type": "application/json" });
+      res.end(JSON.stringify({ error: "invalid_request", error_description: "Par\xE2metro code ausente." }));
+      return;
+    }
+    let entry = authCodes.get(code);
+    if (entry) {
+      authCodes.delete(code);
     } else {
-      const formData = new URLSearchParams(bodyStr);
-      grantType = formData.get("grant_type") || "";
-      code = formData.get("code") || "";
-      redirectUri = formData.get("redirect_uri") || "";
-      clientId = formData.get("client_id") || "";
-      codeVerifier = formData.get("code_verifier") || "";
-      refreshToken = formData.get("refresh_token") || "";
+      const hmacCode = verifyHmacPayload(code, "code");
+      if (hmacCode) {
+        entry = {
+          code,
+          clientId: hmacCode.clientId,
+          redirectUri: hmacCode.redirectUri,
+          codeChallenge: hmacCode.codeChallenge,
+          codeChallengeMethod: "S256",
+          scope: hmacCode.scope,
+          context: hmacCode.context,
+          expiresAt: hmacCode.__exp * 1e3
+        };
+      }
     }
-    if (grantType === "authorization_code") {
-      if (!code) {
-        res.writeHead(400, { "Content-Type": "application/json" });
-        res.end(JSON.stringify({ error: "invalid_request", error_description: "Par\xE2metro code ausente." }));
-        return;
-      }
-      let entry = authCodes.get(code);
-      if (entry) {
-        authCodes.delete(code);
-      } else {
-        const hmacCode = verifyHmacPayload(code, "code");
-        if (hmacCode) {
-          entry = {
-            code,
-            clientId: hmacCode.clientId,
-            redirectUri: hmacCode.redirectUri,
-            codeChallenge: hmacCode.codeChallenge,
-            codeChallengeMethod: "S256",
-            scope: hmacCode.scope,
-            context: hmacCode.context,
-            expiresAt: hmacCode.__exp * 1e3
-          };
-        }
-      }
-      if (!entry) {
-        res.writeHead(400, { "Content-Type": "application/json" });
-        res.end(JSON.stringify({ error: "invalid_grant", error_description: "C\xF3digo de autoriza\xE7\xE3o inv\xE1lido ou j\xE1 utilizado." }));
-        return;
-      }
-      if (entry.expiresAt <= Date.now()) {
-        res.writeHead(400, { "Content-Type": "application/json" });
-        res.end(JSON.stringify({ error: "invalid_grant", error_description: "C\xF3digo de autoriza\xE7\xE3o expirado." }));
-        return;
-      }
-      if (entry.codeChallenge) {
-        const pkceValid = verifyPkceS256(codeVerifier, entry.codeChallenge);
-        if (!pkceValid) {
-          res.writeHead(400, { "Content-Type": "application/json" });
-          res.end(JSON.stringify({ error: "invalid_grant", error_description: "PKCE verification failed: code_verifier incompat\xEDvel." }));
-          return;
-        }
-      }
-      const expiresIn = 3600;
-      const tokenPayload = {
-        clientId: entry.clientId,
-        context: entry.context,
-        scope: entry.scope
-      };
-      const accessToken = signHmacPayload("at", tokenPayload, expiresIn);
-      const newRefreshToken = signHmacPayload("rt", tokenPayload, 30 * 86400);
-      const expiresAt = Date.now() + expiresIn * 1e3;
-      const tokenRecord = {
-        accessToken,
-        refreshToken: newRefreshToken,
-        clientId: entry.clientId,
-        context: entry.context,
-        scope: entry.scope,
-        expiresAt
-      };
-      activeTokens.set(accessToken, tokenRecord);
-      refreshTokens.set(newRefreshToken, tokenRecord);
-      res.writeHead(200, {
-        "Content-Type": "application/json",
-        "Cache-Control": "no-store",
-        "Pragma": "no-cache"
-      });
-      res.end(JSON.stringify({
-        access_token: accessToken,
-        token_type: "Bearer",
-        expires_in: expiresIn,
-        refresh_token: newRefreshToken,
-        scope: entry.scope
-      }));
+    if (!entry) {
+      res.writeHead(400, { "Content-Type": "application/json" });
+      res.end(JSON.stringify({ error: "invalid_grant", error_description: "C\xF3digo de autoriza\xE7\xE3o inv\xE1lido ou j\xE1 utilizado." }));
       return;
     }
-    if (grantType === "refresh_token") {
-      if (!refreshToken) {
-        res.writeHead(400, { "Content-Type": "application/json" });
-        res.end(JSON.stringify({ error: "invalid_request", error_description: "Par\xE2metro refresh_token ausente." }));
-        return;
-      }
-      const existingRecord = refreshTokens.get(refreshToken);
-      if (!existingRecord) {
-        res.writeHead(400, { "Content-Type": "application/json" });
-        res.end(JSON.stringify({ error: "invalid_grant", error_description: "Refresh token inv\xE1lido ou revogado." }));
-        return;
-      }
-      refreshTokens.delete(refreshToken);
-      activeTokens.delete(existingRecord.accessToken);
-      const newAccessToken = `gigante_mcp_at_${randomBytes(32).toString("base64url")}`;
-      const newRefreshToken = `gigante_mcp_rt_${randomBytes(32).toString("base64url")}`;
-      const expiresIn = 3600;
-      const expiresAt = Date.now() + expiresIn * 1e3;
-      const newRecord = {
-        accessToken: newAccessToken,
-        refreshToken: newRefreshToken,
-        clientId: existingRecord.clientId,
-        context: existingRecord.context,
-        scope: existingRecord.scope,
-        expiresAt
-      };
-      activeTokens.set(newAccessToken, newRecord);
-      refreshTokens.set(newRefreshToken, newRecord);
-      res.writeHead(200, {
-        "Content-Type": "application/json",
-        "Cache-Control": "no-store"
-      });
-      res.end(JSON.stringify({
-        access_token: newAccessToken,
-        token_type: "Bearer",
-        expires_in: expiresIn,
-        refresh_token: newRefreshToken,
-        scope: existingRecord.scope
-      }));
+    if (entry.expiresAt <= Date.now()) {
+      res.writeHead(400, { "Content-Type": "application/json" });
+      res.end(JSON.stringify({ error: "invalid_grant", error_description: "C\xF3digo de autoriza\xE7\xE3o expirado." }));
       return;
     }
-    res.writeHead(400, { "Content-Type": "application/json" });
-    res.end(JSON.stringify({ error: "unsupported_grant_type", error_description: "Use authorization_code ou refresh_token." }));
-  });
+    if (entry.codeChallenge) {
+      const pkceValid = verifyPkceS256(codeVerifier, entry.codeChallenge);
+      if (!pkceValid) {
+        res.writeHead(400, { "Content-Type": "application/json" });
+        res.end(JSON.stringify({ error: "invalid_grant", error_description: "PKCE verification failed: code_verifier incompat\xEDvel." }));
+        return;
+      }
+    }
+    const expiresIn = 3600;
+    const tokenPayload = {
+      clientId: entry.clientId,
+      context: entry.context,
+      scope: entry.scope
+    };
+    const accessToken = signHmacPayload("at", tokenPayload, expiresIn);
+    const newRefreshToken = signHmacPayload("rt", tokenPayload, 30 * 86400);
+    const expiresAt = Date.now() + expiresIn * 1e3;
+    const tokenRecord = {
+      accessToken,
+      refreshToken: newRefreshToken,
+      clientId: entry.clientId,
+      context: entry.context,
+      scope: entry.scope,
+      expiresAt
+    };
+    activeTokens.set(accessToken, tokenRecord);
+    refreshTokens.set(newRefreshToken, tokenRecord);
+    res.writeHead(200, {
+      "Content-Type": "application/json",
+      "Cache-Control": "no-store",
+      "Pragma": "no-cache"
+    });
+    res.end(JSON.stringify({
+      access_token: accessToken,
+      token_type: "Bearer",
+      expires_in: expiresIn,
+      refresh_token: newRefreshToken,
+      scope: entry.scope
+    }));
+    return;
+  }
+  if (grantType === "refresh_token") {
+    if (!refreshToken) {
+      res.writeHead(400, { "Content-Type": "application/json" });
+      res.end(JSON.stringify({ error: "invalid_request", error_description: "Par\xE2metro refresh_token ausente." }));
+      return;
+    }
+    const existingRecord = refreshTokens.get(refreshToken);
+    if (!existingRecord) {
+      res.writeHead(400, { "Content-Type": "application/json" });
+      res.end(JSON.stringify({ error: "invalid_grant", error_description: "Refresh token inv\xE1lido ou revogado." }));
+      return;
+    }
+    refreshTokens.delete(refreshToken);
+    activeTokens.delete(existingRecord.accessToken);
+    const newAccessToken = `gigante_mcp_at_${randomBytes(32).toString("base64url")}`;
+    const newRefreshToken = `gigante_mcp_rt_${randomBytes(32).toString("base64url")}`;
+    const expiresIn = 3600;
+    const expiresAt = Date.now() + expiresIn * 1e3;
+    const newRecord = {
+      accessToken: newAccessToken,
+      refreshToken: newRefreshToken,
+      clientId: existingRecord.clientId,
+      context: existingRecord.context,
+      scope: existingRecord.scope,
+      expiresAt
+    };
+    activeTokens.set(newAccessToken, newRecord);
+    refreshTokens.set(newRefreshToken, newRecord);
+    res.writeHead(200, {
+      "Content-Type": "application/json",
+      "Cache-Control": "no-store"
+    });
+    res.end(JSON.stringify({
+      access_token: newAccessToken,
+      token_type: "Bearer",
+      expires_in: expiresIn,
+      refresh_token: newRefreshToken,
+      scope: existingRecord.scope
+    }));
+    return;
+  }
+  res.writeHead(400, { "Content-Type": "application/json" });
+  res.end(JSON.stringify({ error: "unsupported_grant_type", error_description: "Use authorization_code ou refresh_token." }));
 }
-function handleOAuthRevoke(req, res) {
+async function handleOAuthRevoke(req, res) {
   res.setHeader("Access-Control-Allow-Origin", "*");
   res.setHeader("Access-Control-Allow-Methods", "POST, OPTIONS");
   res.setHeader("Access-Control-Allow-Headers", "Content-Type, Authorization");
@@ -538,29 +551,24 @@ function handleOAuthRevoke(req, res) {
     res.end();
     return;
   }
-  let bodyStr = "";
-  req.on("data", (c) => {
-    bodyStr += c;
-  });
-  req.on("end", () => {
-    let tokenToRevoke = "";
-    const contentType = req.headers["content-type"] || "";
-    if (contentType.includes("application/json")) {
-      try {
-        tokenToRevoke = JSON.parse(bodyStr || "{}").token;
-      } catch {
-      }
-    } else {
-      const formData = new URLSearchParams(bodyStr);
-      tokenToRevoke = formData.get("token") || "";
+  const bodyStr = await getRequestBody(req);
+  let tokenToRevoke = "";
+  const contentType = req.headers["content-type"] || "";
+  if (contentType.includes("application/json")) {
+    try {
+      tokenToRevoke = JSON.parse(bodyStr || "{}").token;
+    } catch {
     }
-    if (tokenToRevoke) {
-      activeTokens.delete(tokenToRevoke);
-      refreshTokens.delete(tokenToRevoke);
-    }
-    res.writeHead(200, { "Content-Type": "application/json" });
-    res.end(JSON.stringify({ success: true, message: "Token revogado com sucesso." }));
-  });
+  } else {
+    const formData = new URLSearchParams(bodyStr);
+    tokenToRevoke = formData.get("token") || "";
+  }
+  if (tokenToRevoke) {
+    activeTokens.delete(tokenToRevoke);
+    refreshTokens.delete(tokenToRevoke);
+  }
+  res.writeHead(200, { "Content-Type": "application/json" });
+  res.end(JSON.stringify({ success: true, message: "Token revogado com sucesso." }));
 }
 async function handleOAuthUserinfo(req, res) {
   res.setHeader("Access-Control-Allow-Origin", "*");
