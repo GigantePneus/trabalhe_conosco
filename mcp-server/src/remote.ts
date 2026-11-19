@@ -66,7 +66,7 @@ const requestContext = new AsyncLocalStorage<RequestContext>();
 function createMcpServerInstance(): McpServer {
   const server = new McpServer({
     name: 'gigante-pneus-trabalhe-conosco-remoto',
-    version: '1.0.0',
+    version: '1.3.0',
     description: 'Servidor MCP Remoto — Gestão de vagas e lojas Gigante Pneus Multi-Lojas'
   });
 

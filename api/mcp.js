@@ -534,6 +534,9 @@ async function mcpServerlessHandler(req, res) {
   res.setHeader("Access-Control-Allow-Origin", "*");
   res.setHeader("Access-Control-Allow-Methods", "GET, POST, OPTIONS");
   res.setHeader("Access-Control-Allow-Headers", "Content-Type, Authorization, Accept, mcp-session-id");
+  res.setHeader("Cache-Control", "no-store, no-cache, must-revalidate, proxy-revalidate, max-age=0");
+  res.setHeader("Pragma", "no-cache");
+  res.setHeader("Expires", "0");
   if (req.method === "OPTIONS") {
     res.statusCode = 204;
     res.end();
@@ -542,13 +545,12 @@ async function mcpServerlessHandler(req, res) {
   const pathname = (req.url || "").split("?")[0];
   if (pathname.endsWith("/health") && req.method === "GET") {
     res.setHeader("Content-Type", "application/json");
-    res.setHeader("Cache-Control", "no-store");
     res.statusCode = 200;
     res.end(JSON.stringify({
       status: "ok",
       service: "gigante-pneus-mcp-remote",
       protocol: "streamable-http",
-      version: "1.2.0",
+      version: "1.3.0",
       timestamp: (/* @__PURE__ */ new Date()).toISOString()
     }));
     return;
@@ -590,7 +592,7 @@ async function mcpServerlessHandler(req, res) {
   const backendToken = operatorContext.supabaseSessionToken || incomingToken;
   const server = new McpServer({
     name: "gigante-pneus-trabalhe-conosco-remoto",
-    version: "1.2.0",
+    version: "1.3.0",
     description: "Servidor MCP Administrativo \u2014 Gest\xE3o de vagas, candidatos e curr\xEDculos Gigante Pneus"
   });
   registerGiganteTools(server, {

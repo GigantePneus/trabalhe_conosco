@@ -1,6 +1,6 @@
 {
   "name": "gigante-pneus-mcp-server",
-  "version": "1.0.0",
+  "version": "1.3.0",
   "description": "MCP Server para gestão de vagas do Trabalhe Conosco — Gigante Pneus",
   "type": "module",
   "main": "dist/index.js",
