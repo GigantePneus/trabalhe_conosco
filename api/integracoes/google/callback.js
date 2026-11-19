@@ -15,13 +15,28 @@ var GoogleOAuthService = class _GoogleOAuthService {
   static {
     this.consumedStateNonces = /* @__PURE__ */ new Map();
   }
+  sanitizeEnvValue(val) {
+    if (!val || typeof val !== "string") return "";
+    let cleaned = val.trim();
+    if (cleaned.startsWith('"') && cleaned.endsWith('"') || cleaned.startsWith("'") && cleaned.endsWith("'")) {
+      cleaned = cleaned.slice(1, -1).trim();
+    }
+    cleaned = cleaned.replace(/[\r\n\t]/g, "").trim();
+    return cleaned;
+  }
   getConfig() {
-    const clientId = this.configOverride?.clientId ?? process.env.GOOGLE_CLIENT_ID ?? "";
-    const clientSecret = this.configOverride?.clientSecret ?? process.env.GOOGLE_CLIENT_SECRET ?? "";
-    const redirectUri = this.configOverride?.redirectUri ?? process.env.GOOGLE_OAUTH_REDIRECT_URI ?? "https://trabalheconosco.gigantepneus.com.br/api/integracoes/google/callback";
-    const refreshToken = this.configOverride?.refreshToken ?? process.env.GOOGLE_REFRESH_TOKEN ?? "";
-    const authorizedEmail = (this.configOverride?.authorizedEmail ?? process.env.GOOGLE_AUTHORIZED_EMAIL ?? DEFAULT_CORPORATE_EMAIL).toLowerCase().trim();
-    const stateSecret = this.configOverride?.stateSecret ?? process.env.GOOGLE_OAUTH_STATE_SECRET ?? (clientSecret || "default-gigante-state-secret");
+    const clientId = this.sanitizeEnvValue(this.configOverride?.clientId ?? process.env.GOOGLE_CLIENT_ID);
+    const clientSecret = this.sanitizeEnvValue(this.configOverride?.clientSecret ?? process.env.GOOGLE_CLIENT_SECRET);
+    const redirectUri = this.sanitizeEnvValue(
+      this.configOverride?.redirectUri ?? process.env.GOOGLE_OAUTH_REDIRECT_URI ?? "https://trabalheconosco.gigantepneus.com.br/api/integracoes/google/callback"
+    );
+    const refreshToken = this.sanitizeEnvValue(this.configOverride?.refreshToken ?? process.env.GOOGLE_REFRESH_TOKEN);
+    const authorizedEmail = this.sanitizeEnvValue(
+      this.configOverride?.authorizedEmail ?? process.env.GOOGLE_AUTHORIZED_EMAIL ?? DEFAULT_CORPORATE_EMAIL
+    ).toLowerCase();
+    const stateSecret = this.sanitizeEnvValue(
+      this.configOverride?.stateSecret ?? process.env.GOOGLE_OAUTH_STATE_SECRET ?? (clientSecret || "default-gigante-state-secret")
+    );
     const isLocalDev = process.env.NODE_ENV !== "production" && !process.env.VERCEL;
     const persistRefreshTokenLocally = this.configOverride?.persistRefreshTokenLocally ?? isLocalDev;
     const envFilePath = this.configOverride?.envFilePath ?? path.resolve(process.cwd(), ".env.local");
@@ -202,7 +217,14 @@ var GoogleOAuthService = class _GoogleOAuthService {
       signal: AbortSignal.timeout(15e3)
     });
     if (!tokenRes.ok) {
-      throw new Error(`OAUTH_TOKEN_EXCHANGE_FAILED: Google retornou HTTP ${tokenRes.status}.`);
+      let errorDetail = "";
+      try {
+        const errJson = await tokenRes.json();
+        errorDetail = errJson.error_description || errJson.error || "";
+      } catch {
+      }
+      const safeSuffix = errorDetail ? `: ${errorDetail}` : "";
+      throw new Error(`OAUTH_TOKEN_EXCHANGE_FAILED: Google retornou HTTP ${tokenRes.status}${safeSuffix}.`);
     }
     const tokenData = await tokenRes.json();
     if (!tokenData.access_token) {
@@ -276,7 +298,18 @@ var GoogleOAuthService = class _GoogleOAuthService {
       signal: AbortSignal.timeout(15e3)
     });
     if (!response.ok) {
-      throw new Error(`OAUTH_REFRESH_FAILED: Falha ao renovar access_token (HTTP ${response.status}).`);
+      let errorDetail = "";
+      try {
+        const errorJson = await response.json();
+        errorDetail = errorJson.error_description || errorJson.error || "";
+      } catch {
+        try {
+          errorDetail = (await response.text()).slice(0, 200);
+        } catch {
+        }
+      }
+      const safeSuffix = errorDetail ? `: ${errorDetail}` : "";
+      throw new Error(`OAUTH_REFRESH_FAILED: Falha ao renovar access_token (HTTP ${response.status}${safeSuffix}).`);
     }
     const data = await response.json();
     if (!data.access_token) {

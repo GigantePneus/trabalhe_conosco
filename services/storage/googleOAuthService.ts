@@ -49,27 +49,44 @@ export class GoogleOAuthService {
   private configOverride?: Partial<GoogleOAuthConfig>;
   private fetchImpl: FetchLike;
 
+  private sanitizeEnvValue(val?: string): string {
+    if (!val || typeof val !== 'string') return '';
+    let cleaned = val.trim();
+    if ((cleaned.startsWith('"') && cleaned.endsWith('"')) || (cleaned.startsWith("'") && cleaned.endsWith("'"))) {
+      cleaned = cleaned.slice(1, -1).trim();
+    }
+    // Remove quebras de linha ou caracteres de retorno acidentais de copia e cola
+    cleaned = cleaned.replace(/[\r\n\t]/g, '').trim();
+    return cleaned;
+  }
+
   constructor(configOverride?: Partial<GoogleOAuthConfig>, fetchImpl?: FetchLike) {
     this.configOverride = configOverride;
     this.fetchImpl = fetchImpl || globalThis.fetch.bind(globalThis);
   }
 
   public getConfig(): GoogleOAuthConfig {
-    const clientId = this.configOverride?.clientId ?? process.env.GOOGLE_CLIENT_ID ?? '';
-    const clientSecret = this.configOverride?.clientSecret ?? process.env.GOOGLE_CLIENT_SECRET ?? '';
+    const clientId = this.sanitizeEnvValue(this.configOverride?.clientId ?? process.env.GOOGLE_CLIENT_ID);
+    const clientSecret = this.sanitizeEnvValue(this.configOverride?.clientSecret ?? process.env.GOOGLE_CLIENT_SECRET);
     const redirectUri =
-      this.configOverride?.redirectUri ??
-      process.env.GOOGLE_OAUTH_REDIRECT_URI ??
-      'https://trabalheconosco.gigantepneus.com.br/api/integracoes/google/callback';
-    const refreshToken = this.configOverride?.refreshToken ?? process.env.GOOGLE_REFRESH_TOKEN ?? '';
+      this.sanitizeEnvValue(
+        this.configOverride?.redirectUri ??
+        process.env.GOOGLE_OAUTH_REDIRECT_URI ??
+        'https://trabalheconosco.gigantepneus.com.br/api/integracoes/google/callback'
+      );
+    const refreshToken = this.sanitizeEnvValue(this.configOverride?.refreshToken ?? process.env.GOOGLE_REFRESH_TOKEN);
     const authorizedEmail =
-      (this.configOverride?.authorizedEmail ??
+      this.sanitizeEnvValue(
+        this.configOverride?.authorizedEmail ??
         process.env.GOOGLE_AUTHORIZED_EMAIL ??
-        DEFAULT_CORPORATE_EMAIL).toLowerCase().trim();
+        DEFAULT_CORPORATE_EMAIL
+      ).toLowerCase();
     const stateSecret =
-      this.configOverride?.stateSecret ??
-      process.env.GOOGLE_OAUTH_STATE_SECRET ??
-      (clientSecret || 'default-gigante-state-secret');
+      this.sanitizeEnvValue(
+        this.configOverride?.stateSecret ??
+        process.env.GOOGLE_OAUTH_STATE_SECRET ??
+        (clientSecret || 'default-gigante-state-secret')
+      );
 
     const isLocalDev = process.env.NODE_ENV !== 'production' && !process.env.VERCEL;
     const persistRefreshTokenLocally =
@@ -295,7 +312,13 @@ export class GoogleOAuthService {
     });
 
     if (!tokenRes.ok) {
-      throw new Error(`OAUTH_TOKEN_EXCHANGE_FAILED: Google retornou HTTP ${tokenRes.status}.`);
+      let errorDetail = '';
+      try {
+        const errJson = (await tokenRes.json()) as { error?: string; error_description?: string };
+        errorDetail = errJson.error_description || errJson.error || '';
+      } catch {}
+      const safeSuffix = errorDetail ? `: ${errorDetail}` : '';
+      throw new Error(`OAUTH_TOKEN_EXCHANGE_FAILED: Google retornou HTTP ${tokenRes.status}${safeSuffix}.`);
     }
 
     const tokenData = (await tokenRes.json()) as {
@@ -396,7 +419,17 @@ export class GoogleOAuthService {
     });
 
     if (!response.ok) {
-      throw new Error(`OAUTH_REFRESH_FAILED: Falha ao renovar access_token (HTTP ${response.status}).`);
+      let errorDetail = '';
+      try {
+        const errorJson = (await response.json()) as { error?: string; error_description?: string };
+        errorDetail = errorJson.error_description || errorJson.error || '';
+      } catch {
+        try {
+          errorDetail = (await response.text()).slice(0, 200);
+        } catch {}
+      }
+      const safeSuffix = errorDetail ? `: ${errorDetail}` : '';
+      throw new Error(`OAUTH_REFRESH_FAILED: Falha ao renovar access_token (HTTP ${response.status}${safeSuffix}).`);
     }
 
     const data = (await response.json()) as {

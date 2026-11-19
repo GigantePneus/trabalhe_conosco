@@ -12,7 +12,7 @@ import {
 } from 'lucide-react';
 import { analyzeSurveyResponses, analyzeTalentCompatibility, listAvailableGeminiModels, AIAnalysisResult, TalentAnalysisResult, DEFAULT_PROMPT_SURVEYS, DEFAULT_PROMPT_TALENTS } from '../aiService';
 import { createDefaultJobLanding, parseJobLandingFromRequisitos, serializeJobLanding, toLines } from '../jobsService';
-import { filterCandidatosAdmin } from '../services/adminFilterService';
+import { filterCandidatosAdmin, getUniqueCargos, normalizeFilterText } from '../services/adminFilterService';
 
 const AdminDashboard: React.FC = () => {
   const [activeTab, setActiveTab] = useState<'overview' | 'talents' | 'surveys' | 'ai' | 'jobs' | 'lojas' | 'acessos' | 'settings'>('overview');
@@ -87,7 +87,7 @@ const AdminDashboard: React.FC = () => {
   const [candidatos, setCandidatos] = useState<Candidato[]>([]);
   const [loading, setLoading] = useState(true);
 
-  // Filtros Estruturados do Banco de Talentos (Prompt 65)
+  // Filtros Estruturados do Banco de Talentos (Prompt 65 / Prompt 94)
   const [filterLojaId, setFilterLojaId] = useState('');
   const [filterCargoId, setFilterCargoId] = useState('');
   const [filterStatus, setFilterStatus] = useState('');
@@ -96,6 +96,11 @@ const AdminDashboard: React.FC = () => {
   const [startDate, setStartDate] = useState('');
   const [endDate, setEndDate] = useState('');
   const [searchTerm, setSearchTerm] = useState('');
+
+  // Lista única e normalizada de cargos cadastrados na rede/unidades autorizadas (Prompt 94)
+  const uniqueCargos = useMemo(() => {
+    return getUniqueCargos(cargos);
+  }, [cargos]);
 
   // Lista filtrada em memória de forma limpa e reativa
   const filteredCandidatos = useMemo(() => {
@@ -107,9 +112,10 @@ const AdminDashboard: React.FC = () => {
       status: filterStatus,
       startDate,
       endDate,
-      searchTerm
+      searchTerm,
+      cargosList: cargos
     }) as Candidato[];
-  }, [candidatos, filterLojaId, filterCargoId, filterCity, filterEstado, filterStatus, startDate, endDate, searchTerm]);
+  }, [candidatos, filterLojaId, filterCargoId, filterCity, filterEstado, filterStatus, startDate, endDate, searchTerm, cargos]);
 
   const clearAllFilters = () => {
     if (isFranqueadoOrGerente && userAuthorizedLojas.length === 1) {
@@ -183,8 +189,8 @@ const AdminDashboard: React.FC = () => {
   const [analyzingSurvey, setAnalyzingSurvey] = useState<boolean>(false);
   const [surveyAnalysisResult, setSurveyAnalysisResult] = useState<AIAnalysisResult | null>(null);
   const [selectedAiCargo, setSelectedAiCargo] = useState<string>('');
+  const [selectedAiLojaId, setSelectedAiLojaId] = useState<string>('');
   const [analyzingTalents, setAnalyzingTalents] = useState<boolean>(false);
-  const [matchingTalents, setMatchingTalents] = useState<Candidato[]>([]);
   const [talentAnalysisResults, setTalentAnalysisResults] = useState<Record<string, TalentAnalysisResult>>({});
   const [analyzingTalentId, setAnalyzingTalentId] = useState<string | null>(null);
   const [aiSubTab, setAiSubTab] = useState<'surveys' | 'talents'>('surveys');
@@ -264,6 +270,7 @@ const AdminDashboard: React.FC = () => {
         // Se tiver apenas 1 unidade vinculada, auto-seleciona no filtro
         if (mappedLojas.length === 1) {
           setFilterLojaId(mappedLojas[0].id);
+          setSelectedAiLojaId(mappedLojas[0].id);
         }
       } else {
         setUserAuthorizedLojas([]);
@@ -1311,7 +1318,12 @@ const AdminDashboard: React.FC = () => {
   const handleAnalyzeTalent = async (candidate: Candidato) => {
     setAnalyzingTalentId(candidate.id);
     try {
-      const cargoContext = cargos.find(c => c.nome === (selectedAiCargo || candidate.vaga_interesse));
+      // Prioriza a vaga específica do candidato para obter o contexto mais fiel da unidade,
+      // ou busca a vaga com o mesmo título normalizado
+      const cargoContext =
+        (candidate.cargo_id && cargos.find(c => c.id === candidate.cargo_id)) ||
+        cargos.find(c => normalizeFilterText(c.titulo || c.nome) === normalizeFilterText(selectedAiCargo || candidate.vaga_interesse));
+
       const landing = cargoContext ? parseJobLandingFromRequisitos(cargoContext) : null;
       const enrichedPrompt = landing?.agentContext
         ? `${promptTalents}\n\nContexto adicional da vaga:\n${landing.agentContext}`
@@ -1338,14 +1350,43 @@ const AdminDashboard: React.FC = () => {
     }
   };
 
+  // Candidatos correspondentes ao cargo e unidade selecionados na Análise de IA (Prompt 94)
+  const matchingTalents = useMemo(() => {
+    if (!selectedAiCargo || selectedAiCargo.trim() === '') {
+      return [];
+    }
+
+    const normalizedSelected = normalizeFilterText(selectedAiCargo);
+
+    // Conjunto de UUIDs de todas as vagas que possuem este mesmo cargo normalizado
+    const matchingVagaIds = new Set(
+      cargos
+        .filter(c => normalizeFilterText(c.titulo || c.nome) === normalizedSelected)
+        .map(c => c.id)
+    );
+
+    return candidatos.filter(cand => {
+      // 1. Filtro por Cargo: casa por vaga_interesse ou por cargo_id pertencente ao cargo
+      const candTitleNorm = normalizeFilterText(cand.vaga_interesse);
+      const matchCargo =
+        candTitleNorm === normalizedSelected ||
+        Boolean(cand.cargo_id && matchingVagaIds.has(cand.cargo_id));
+
+      if (!matchCargo) return false;
+
+      // 2. Filtro por Unidade (se selecionada): combina unidade + cargo
+      if (selectedAiLojaId && selectedAiLojaId.trim() !== '') {
+        if (cand.loja_id !== selectedAiLojaId) {
+          return false;
+        }
+      }
+
+      return true;
+    });
+  }, [candidatos, selectedAiCargo, selectedAiLojaId, cargos]);
+
   const handleSelectAiCargo = (cargo: string) => {
     setSelectedAiCargo(cargo);
-    if (cargo) {
-      const filtered = candidatos.filter(c => c.vaga_interesse === cargo);
-      setMatchingTalents(filtered);
-    } else {
-      setMatchingTalents([]);
-    }
   };
 
   const handleSaveGeminiKey = (key: string) => {
@@ -1761,7 +1802,7 @@ const AdminDashboard: React.FC = () => {
                     )}
                   </select>
 
-                  {/* Filtro 2: Cargo / Vaga (cargo_id estruturado) */}
+                  {/* Filtro 2: Cargo / Vaga (cargos únicos normalizados - Prompt 94) */}
                   <select
                     className="w-full px-3.5 py-2.5 bg-gray-50 dark:bg-gray-800 border-none rounded-xl text-xs font-bold text-gray-700 dark:text-gray-300 outline-none focus:ring-2 focus:ring-red-600 truncate"
                     value={filterCargoId}
@@ -1769,9 +1810,9 @@ const AdminDashboard: React.FC = () => {
                   >
                     <option value="">Todas as Vagas</option>
                     <option value="espontanea">★ Candidatura Espontânea</option>
-                    {cargos.map(c => (
-                      <option key={c.id} value={c.id}>
-                        {c.titulo || c.nome}
+                    {uniqueCargos.map(c => (
+                      <option key={c.normalizedTitulo} value={c.titulo}>
+                        {c.titulo}
                       </option>
                     ))}
                   </select>
@@ -2655,21 +2696,59 @@ const AdminDashboard: React.FC = () => {
               {aiSubTab === 'talents' && (
                 <div className="grid grid-cols-1 xl:grid-cols-3 gap-8 items-start">
                   
-                  {/* Filtro de Vagas */}
+                  {/* Filtro de Cargo e Unidade */}
                   <div className="xl:col-span-1 bg-white dark:bg-gray-900 rounded-[2.5rem] p-8 border border-gray-100 dark:border-gray-800 shadow-xl space-y-6">
                     <div className="space-y-2">
-                      <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest block">Selecione o Cargo da Vaga</label>
+                      <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest block">Selecione o Cargo</label>
                       <select
                         value={selectedAiCargo}
                         onChange={(e) => handleSelectAiCargo(e.target.value)}
                         className="w-full px-5 py-4 rounded-2xl border border-gray-200 dark:border-gray-800 dark:bg-gray-800 outline-none focus:ring-4 focus:ring-red-600/10 focus:border-red-600 font-bold cursor-pointer"
                       >
-                        <option value="">-- Selecione uma vaga --</option>
-                        {cargos.map((c) => (
-                          <option key={c.id} value={c.nome}>
-                            {c.nome}
+                        <option value="">-- Selecione um cargo --</option>
+                        {uniqueCargos.map((c) => (
+                          <option key={c.normalizedTitulo} value={c.titulo}>
+                            {c.titulo}
                           </option>
                         ))}
+                      </select>
+                    </div>
+
+                    <div className="space-y-2">
+                      <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest block">Unidade / Loja (Opcional)</label>
+                      <select
+                        value={selectedAiLojaId}
+                        onChange={(e) => setSelectedAiLojaId(e.target.value)}
+                        disabled={isFranqueadoOrGerente && userAuthorizedLojas.length <= 1}
+                        className="w-full px-5 py-4 rounded-2xl border border-gray-200 dark:border-gray-800 dark:bg-gray-800 outline-none focus:ring-4 focus:ring-red-600/10 focus:border-red-600 font-bold cursor-pointer text-sm disabled:opacity-60 disabled:cursor-not-allowed"
+                      >
+                        {isFranqueadoOrGerente ? (
+                          userAuthorizedLojas.length === 0 ? (
+                            <option value="">Nenhuma unidade vinculada</option>
+                          ) : userAuthorizedLojas.length === 1 ? (
+                            <option value={userAuthorizedLojas[0].id}>
+                              {userAuthorizedLojas[0].nome} ({userAuthorizedLojas[0].cidade}/{userAuthorizedLojas[0].estado})
+                            </option>
+                          ) : (
+                            <>
+                              <option value="">Todas as Minhas Unidades ({userAuthorizedLojas.length})</option>
+                              {userAuthorizedLojas.map((l) => (
+                                <option key={l.id} value={l.id}>
+                                  {l.nome} ({l.cidade}/{l.estado})
+                                </option>
+                              ))}
+                            </>
+                          )
+                        ) : (
+                          <>
+                            <option value="">Todas as Unidades da Rede ({lojasList.length})</option>
+                            {lojasList.map((l) => (
+                              <option key={l.id} value={l.id}>
+                                {l.nome} ({l.cidade}/{l.estado})
+                              </option>
+                            ))}
+                          </>
+                        )}
                       </select>
                     </div>
 
@@ -2677,7 +2756,9 @@ const AdminDashboard: React.FC = () => {
                       <div className="p-5 bg-red-50/50 dark:bg-teal-950/10 rounded-3xl border border-red-100/50 dark:border-red-900/20 space-y-2 animate-in fade-in duration-300">
                         <h4 className="font-black text-red-800 dark:text-red-400 uppercase text-xs tracking-wider">Candidatos Inscritos</h4>
                         <div className="text-3xl font-black text-red-600">{matchingTalents.length}</div>
-                        <p className="text-[10px] font-black uppercase text-gray-400">Currículos cadastrados para esta vaga</p>
+                        <p className="text-[10px] font-black uppercase text-gray-400">
+                          {selectedAiLojaId ? 'Currículos filtrados por cargo e unidade' : 'Currículos cadastrados para este cargo na rede autorizada'}
+                        </p>
                       </div>
                     )}
                   </div>
@@ -2703,14 +2784,21 @@ const AdminDashboard: React.FC = () => {
                         </div>
                         <h3 className="text-xl font-black text-gray-900 dark:text-white uppercase tracking-tighter">Sem Candidatos Inscritos</h3>
                         <p className="text-gray-500 max-w-md text-sm font-medium">
-                          Não encontramos nenhum candidato cadastrado no banco com interesse direto para a vaga de "{selectedAiCargo}" no momento.
+                          Não encontramos nenhum candidato cadastrado no banco com interesse direto para o cargo de "{selectedAiCargo}"{selectedAiLojaId ? ' na unidade selecionada' : ''} no momento.
                         </p>
                       </div>
                     )}
 
                     {selectedAiCargo && matchingTalents.length > 0 && (
                       <div className="space-y-6">
-                        <h3 className="font-black text-gray-900 dark:text-white uppercase tracking-tighter text-xl">Triagem de Candidatos - {selectedAiCargo}</h3>
+                        <h3 className="font-black text-gray-900 dark:text-white uppercase tracking-tighter text-xl">
+                          Triagem de Candidatos — {selectedAiCargo}
+                          {selectedAiLojaId && (
+                            <span className="text-sm font-bold text-gray-500 block sm:inline sm:ml-2">
+                              • {(isFranqueadoOrGerente ? userAuthorizedLojas : lojasList).find(l => l.id === selectedAiLojaId)?.nome || 'Unidade selecionada'}
+                            </span>
+                          )}
+                        </h3>
                         
                         <div className="space-y-4">
                           {matchingTalents.map((cand) => {

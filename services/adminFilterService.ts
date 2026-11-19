@@ -33,13 +33,64 @@ export interface CandidatoAdminItem {
 
 export interface AdminFilters {
   lojaId?: string;
-  cargoId?: string; // UUID ou 'espontanea'
+  cargoId?: string; // Título do cargo, UUID ou 'espontanea'
   cidade?: string;
   estado?: string;
   status?: string;
   startDate?: string; // YYYY-MM-DD
   endDate?: string; // YYYY-MM-DD
   searchTerm?: string;
+  cargosList?: Array<{ id: string; titulo?: string; nome?: string; [key: string]: any }>;
+}
+
+export interface UniqueCargoOption {
+  titulo: string;
+  normalizedTitulo: string;
+  vagaIds: string[];
+}
+
+/**
+ * Extrai a lista única de cargos a partir das vagas cadastradas no sistema,
+ * normalizando espaços, maiúsculas/minúsculas e ordenando em ordem alfabética.
+ */
+export function getUniqueCargos(
+  cargos: Array<{ id: string; titulo?: string; nome?: string; loja_id?: string; [key: string]: any }>
+): UniqueCargoOption[] {
+  if (!Array.isArray(cargos) || cargos.length === 0) {
+    return [];
+  }
+
+  const map = new Map<string, UniqueCargoOption>();
+
+  for (const c of cargos) {
+    const rawTitle = (c.titulo || c.nome || '').trim();
+    if (!rawTitle) continue;
+
+    // Normaliza para deduplicação: remove espaços extras repetidos
+    const cleanDisplayTitle = rawTitle.replace(/\s+/g, ' ');
+    const normalizedKey = normalizeFilterText(cleanDisplayTitle);
+
+    if (!normalizedKey) continue;
+
+    const existing = map.get(normalizedKey);
+    if (existing) {
+      if (c.id && !existing.vagaIds.includes(c.id)) {
+        existing.vagaIds.push(c.id);
+      }
+      if (cleanDisplayTitle.length > existing.titulo.length) {
+        existing.titulo = cleanDisplayTitle;
+      }
+    } else {
+      map.set(normalizedKey, {
+        titulo: cleanDisplayTitle,
+        normalizedTitulo: normalizedKey,
+        vagaIds: c.id ? [c.id] : []
+      });
+    }
+  }
+
+  // Ordena em ordem alfabética (pt-BR)
+  return Array.from(map.values()).sort((a, b) => a.titulo.localeCompare(b.titulo, 'pt-BR'));
 }
 
 /**
@@ -97,6 +148,17 @@ export function filterCandidatosAdmin(
     }
   }
 
+  // Monta mapa de vaga ID -> normalized título se cargosList for fornecido
+  let vagaIdToNormalizedTitle: Map<string, string> | null = null;
+  if (Array.isArray(filters.cargosList) && filters.cargosList.length > 0) {
+    vagaIdToNormalizedTitle = new Map();
+    for (const c of filters.cargosList) {
+      if (c && c.id) {
+        vagaIdToNormalizedTitle.set(c.id, normalizeFilterText(c.titulo || c.nome));
+      }
+    }
+  }
+
   return items.filter(item => {
     // 1. Filtro Estruturado por Unidade Franqueada (loja_id)
     if (lojaId && lojaId.trim() !== '') {
@@ -105,7 +167,7 @@ export function filterCandidatosAdmin(
       }
     }
 
-    // 2. Filtro Estruturado por Cargo / Vaga (cargo_id ou Candidatura Espontânea)
+    // 2. Filtro Estruturado por Cargo / Vaga (cargo_id, título do cargo ou Candidatura Espontânea)
     if (cargoId && cargoId.trim() !== '') {
       if (cargoId === 'espontanea') {
         const isEspontanea = !item.cargo_id || 
@@ -113,7 +175,36 @@ export function filterCandidatosAdmin(
           normalizeFilterText(item.vaga_interesse) === 'geral';
         if (!isEspontanea) return false;
       } else {
-        if (item.cargo_id !== cargoId) {
+        const normalizedFilterCargo = normalizeFilterText(cargoId);
+
+        // 1. Match direto por vaga_interesse normalizada
+        const matchByTitle = normalizeFilterText(item.vaga_interesse) === normalizedFilterCargo;
+
+        // 2. Match direto por UUID se o filtro tiver recebido um UUID específico
+        const matchByDirectId = item.cargo_id && item.cargo_id === cargoId;
+
+        // 3. Match pelo cargo da vaga a partir do mapa de cargos (cargosList)
+        let matchByMappedVaga = false;
+        if (vagaIdToNormalizedTitle && item.cargo_id) {
+          const mappedTitle = vagaIdToNormalizedTitle.get(item.cargo_id);
+          if (mappedTitle && mappedTitle === normalizedFilterCargo) {
+            matchByMappedVaga = true;
+          }
+        }
+
+        // 4. Se cargoId passado for um UUID de vaga existente, verificar se o candidato tem o mesmo título daquela vaga
+        if (!matchByTitle && !matchByDirectId && !matchByMappedVaga && vagaIdToNormalizedTitle && cargoId) {
+          const filterTitleFromUuid = vagaIdToNormalizedTitle.get(cargoId);
+          if (filterTitleFromUuid) {
+            const itemTitle = normalizeFilterText(item.vaga_interesse) || 
+              (item.cargo_id ? vagaIdToNormalizedTitle.get(item.cargo_id) : '');
+            if (itemTitle && itemTitle === filterTitleFromUuid) {
+              matchByMappedVaga = true;
+            }
+          }
+        }
+
+        if (!matchByTitle && !matchByDirectId && !matchByMappedVaga) {
           return false;
         }
       }
