@@ -342,12 +342,14 @@ function registerGiganteTools(server, config) {
   );
   server.tool(
     "anexar_curriculo",
-    "Faz o upload do arquivo bin\xE1rio de curr\xEDculo do candidato para armazenamento seguro no Google Drive institucional e vincula ao registro de candidato_curriculos. Aceita arquivos em Base64 (PDF, DOC ou DOCX).",
+    "Faz o upload do arquivo bin\xE1rio de curr\xEDculo do candidato para armazenamento seguro no Google Drive institucional e vincula ao registro de candidato_curriculos. Aceita arquivos em Base64 (PDF, DOC ou DOCX). Resolve automaticamente a pasta da unidade e a subpasta por cargo.",
     {
       candidatoId: z.string().describe("ID (UUID) do candidato ao qual o curr\xEDculo pertence."),
       arquivoBase64: z.string().describe("Conte\xFAdo completo do arquivo codificado em Base64."),
       nomeArquivo: z.string().describe('Nome original do arquivo com extens\xE3o (ex: "curriculo_candidato.pdf").'),
-      tipoMime: z.string().optional().describe('Tipo MIME do arquivo (ex: "application/pdf"). Se omitido, ser\xE1 inferido do arquivo.')
+      tipoMime: z.string().optional().describe('Tipo MIME do arquivo (ex: "application/pdf"). Se omitido, ser\xE1 inferido do arquivo.'),
+      lojaId: z.string().optional().describe("UUID da unidade/loja para direcionamento da pasta no Google Drive. Se omitido, ser\xE1 resolvido automaticamente das candidaturas do candidato."),
+      cargo: z.string().optional().describe('Cargo pretendido (ex: "Mec\xE2nico", "Consultor de Vendas") para direcionamento da subpasta no Google Drive. Se omitido, ser\xE1 resolvido automaticamente das candidaturas do candidato.')
     },
     async (params) => {
       const result = await apiRequest(config, "POST", "/api/admin/candidatos", {
@@ -355,7 +357,9 @@ function registerGiganteTools(server, config) {
         candidatoId: params.candidatoId,
         arquivoBase64: params.arquivoBase64,
         nomeArquivo: params.nomeArquivo,
-        tipoMime: params.tipoMime
+        tipoMime: params.tipoMime,
+        lojaId: params.lojaId,
+        cargo: params.cargo
       });
       return formatResponse(result);
     }

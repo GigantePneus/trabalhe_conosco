@@ -368,11 +368,14 @@ export async function handleCandidatura(
     let driveUpload: { fileId: string; folderId: string; fileName: string; mimeType: string; tamanhoBytes: number; md5Checksum: string } | null = null;
     if (hasArquivo && fileBuffer && payload.arquivo) {
       try {
+        const primaryVaga = vagasList[0];
         driveUpload = await googleDriveStorage.uploadFile({
           buffer: fileBuffer,
           originalName: payload.arquivo.nome,
           mimeType: detectedMimeType || 'application/pdf',
-          lojaId: vagasList[0]?.loja_id || null,
+          lojaId: primaryVaga?.loja_id || null,
+          cargoId: primaryVaga?.cargo_id || null,
+          cargoNome: primaryVaga?.cargo_id ? undefined : 'Banco de Talentos - Espontânea',
           simulateFailure: payload.arquivo.simulateFailure === true
         });
       } catch (driveErr: any) {

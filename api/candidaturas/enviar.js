@@ -493,6 +493,50 @@ var ALLOWED_CURRICULO_MIMES = [
 var FOLDER_NAME_CORPORATIVO = "01 - CORPORATIVO";
 var FOLDER_NAME_UNIDADES = "02 - UNIDADES FRANQUEADAS";
 var FOLDER_MIME_TYPE = "application/vnd.google-apps.folder";
+function formatStoreFolderName(loja) {
+  let nome = (loja.nome || "").trim();
+  const uf = (loja.estado || "").trim().toUpperCase();
+  if (!/^gigante\s*pneus/i.test(nome)) {
+    nome = `Gigante Pneus \u2013 ${nome}`;
+  }
+  nome = nome.replace(/\s*[-–—]\s*/g, " \u2013 ");
+  if (uf && !new RegExp(`[\u2013-]\\s*${uf}$`, "i").test(nome) && !nome.includes(`/${uf}`)) {
+    nome = `${nome} \u2013 ${uf}`;
+  }
+  return nome;
+}
+function normalizeCargoSubfolderName(rawTitle) {
+  if (!rawTitle || typeof rawTitle !== "string") {
+    return "Banco de Talentos - Espont\xE2nea";
+  }
+  const clean = rawTitle.trim();
+  if (!clean || clean.toLowerCase() === "geral" || clean.toLowerCase().includes("espontanea") || clean.toLowerCase().includes("espont\xE2nea") || clean.toLowerCase().includes("banco de talentos")) {
+    return "Banco de Talentos - Espont\xE2nea";
+  }
+  const lower = clean.toLowerCase();
+  if (/mecanic|mecânic/i.test(lower)) {
+    if (/auxiliar.*(mecanic|mecânic)/i.test(lower)) {
+      return "Auxiliar de Mec\xE2nico";
+    }
+    return "Mec\xE2nico";
+  }
+  if (/alinhad/i.test(lower)) {
+    return "Alinhador";
+  }
+  if (/vend|comercial|consultor/i.test(lower)) {
+    return "Consultor de Vendas";
+  }
+  if (/estoqu|almoxar/i.test(lower)) {
+    return "Estoquista";
+  }
+  if (/auxiliar.*p[aá]tio/i.test(lower)) {
+    return "Auxiliar de P\xE1tio";
+  }
+  if (/recep|atendent/i.test(lower)) {
+    return "Recepcionista";
+  }
+  return clean.replace(/[/\\?%*:|"<>]/g, " - ").replace(/\s+/g, " ").trim();
+}
 var GoogleDriveOAuthAdapter = class {
   constructor(options) {
     this.folderCache = /* @__PURE__ */ new Map();
@@ -580,17 +624,17 @@ var GoogleDriveOAuthAdapter = class {
     return meta;
   }
   /**
-   * Busca uma subpasta pelo nome exato dentro de `parentId` para evitar duplicação de pastas.
+   * Busca uma subpasta pelo nome exato ou normalizado dentro de `parentId` para evitar duplicação de pastas.
    */
   async findSubfolderByName(name, parentId) {
     const token = await this.oauthService.getValidAccessToken();
-    const escapedName = name.replace(/\\/g, "\\\\").replace(/'/g, "\\'");
+    const cleanName = name.trim();
     const escapedParent = parentId.replace(/\\/g, "\\\\").replace(/'/g, "\\'");
-    const q = `mimeType = '${FOLDER_MIME_TYPE}' and name = '${escapedName}' and '${escapedParent}' in parents and trashed = false`;
+    const q = `mimeType = '${FOLDER_MIME_TYPE}' and '${escapedParent}' in parents and trashed = false`;
     const params = new URLSearchParams({
       q,
       fields: "files(id,name,mimeType,parents,trashed,shared)",
-      pageSize: "1",
+      pageSize: "100",
       spaces: "drive"
     });
     const res = await this.fetchImpl(`https://www.googleapis.com/drive/v3/files?${params.toString()}`, {
@@ -599,10 +643,17 @@ var GoogleDriveOAuthAdapter = class {
       signal: AbortSignal.timeout(1e4)
     });
     if (!res.ok) {
-      throw new Error(`GDRIVE_FOLDER_SEARCH_ERROR: Erro ao buscar subpasta (HTTP ${res.status}).`);
+      throw new Error(`GDRIVE_FOLDER_SEARCH_ERROR: Erro ao buscar subpastas em '${parentId}' (HTTP ${res.status}).`);
     }
     const data = await res.json();
-    return data.files && data.files.length > 0 ? data.files[0] : null;
+    if (!data.files || data.files.length === 0) return null;
+    const normalize = (s) => s.replace(/[-–—]/g, "-").replace(/\s+/g, " ").trim().toLowerCase();
+    const targetNorm = normalize(cleanName);
+    const exact = data.files.find((f) => f.name === cleanName);
+    if (exact) return exact;
+    const normalizedMatch = data.files.find((f) => normalize(f.name) === targetNorm);
+    if (normalizedMatch) return normalizedMatch;
+    return null;
   }
   /**
    * Cria uma pasta privada no Google Drive dentro de `parentId` (ou busca se já existir).
@@ -642,12 +693,12 @@ var GoogleDriveOAuthAdapter = class {
     return await res.json();
   }
   /**
-   * Resolve a pasta de destino para candidaturas corporativas ou de lojas franqueadas:
-   * - Corporativo (lojaId == null): GIGANTE PNEUS - RH / 01 - CORPORATIVO
-   * - Loja (lojaId UUID): GIGANTE PNEUS - RH / 02 - UNIDADES FRANQUEADAS / [UUID_LOJA]
+   * Resolve a pasta de destino da unidade franqueada ou corporativo:
+   * - Corporativo: GIGANTE PNEUS - RH / 01 - CORPORATIVO
+   * - Loja Franqueada: GIGANTE PNEUS - RH / 02 - UNIDADES FRANQUEADAS / Gigante Pneus – [Loja] – [UF]
    */
   async getFolderForStore(lojaId) {
-    if (!lojaId) {
+    if (!lojaId || lojaId === "corporativo" || lojaId === "00000000-0000-0000-0000-000000000000") {
       const envCorpFolder = process.env.GOOGLE_DRIVE_CORP_FOLDER_ID;
       if (envCorpFolder) {
         await this.getFolderMetadata(envCorpFolder);
@@ -667,14 +718,18 @@ var GoogleDriveOAuthAdapter = class {
     if (cachedStoreFolder) {
       return cachedStoreFolder;
     }
+    let lojaRow = null;
     if (this.supabaseAdmin) {
       try {
-        const { data: lojaRow } = await this.supabaseAdmin.from("lojas").select("google_drive_folder_id").eq("id", cleanLojaId).maybeSingle();
+        const { data } = await this.supabaseAdmin.from("lojas").select("id, nome, cidade, estado, google_drive_folder_id").eq("id", cleanLojaId).maybeSingle();
+        lojaRow = data;
         if (lojaRow?.google_drive_folder_id && !lojaRow.google_drive_folder_id.startsWith("folder_")) {
           try {
             const existingMeta = await this.getFolderMetadata(lojaRow.google_drive_folder_id);
-            this.folderCache.set(cleanLojaId, existingMeta.id);
-            return existingMeta.id;
+            if (!existingMeta.trashed && existingMeta.mimeType === FOLDER_MIME_TYPE) {
+              this.folderCache.set(cleanLojaId, existingMeta.id);
+              return existingMeta.id;
+            }
           } catch {
           }
         }
@@ -687,7 +742,8 @@ var GoogleDriveOAuthAdapter = class {
       unidadesRootId = unidadesFolder.id;
       this.folderCache.set("__UNIDADES_ROOT__", unidadesRootId);
     }
-    const storeFolder = await this.createFolder(cleanLojaId, unidadesRootId);
+    const storeFolderName = formatStoreFolderName(lojaRow || { nome: cleanLojaId });
+    const storeFolder = await this.createFolder(storeFolderName, unidadesRootId);
     this.folderCache.set(cleanLojaId, storeFolder.id);
     if (this.supabaseAdmin) {
       try {
@@ -696,6 +752,47 @@ var GoogleDriveOAuthAdapter = class {
       }
     }
     return storeFolder.id;
+  }
+  /**
+   * Resolve a hierarquia completa de armazenamento:
+   * - Unidade Franqueada: GIGANTE PNEUS - RH / 02 - UNIDADES FRANQUEADAS / Gigante Pneus – [Loja] – [UF] / [Cargo Normalizado]
+   * - Corporativo: GIGANTE PNEUS - RH / 01 - CORPORATIVO / [Cargo Normalizado]
+   */
+  async getFolderForStoreAndCargo(options) {
+    const storeFolderId = await this.getFolderForStore(options.lojaId || null);
+    let storeFolderName = FOLDER_NAME_CORPORATIVO;
+    if (options.lojaId && options.lojaId !== "corporativo") {
+      try {
+        const meta = await this.getFolderMetadata(storeFolderId);
+        storeFolderName = meta.name;
+      } catch {
+        storeFolderName = "Unidade Franqueada";
+      }
+    }
+    let rawCargo = options.cargoNome?.trim() || null;
+    if (!rawCargo && options.cargoId && this.supabaseAdmin) {
+      try {
+        const { data: cargoRow } = await this.supabaseAdmin.from("cargos").select("titulo").eq("id", options.cargoId.trim()).maybeSingle();
+        if (cargoRow?.titulo) {
+          rawCargo = cargoRow.titulo;
+        }
+      } catch {
+      }
+    }
+    const cargoFolderName = normalizeCargoSubfolderName(rawCargo);
+    const cacheKey = `cargo_${storeFolderId}_${cargoFolderName}`;
+    let targetFolderId = this.folderCache.get(cacheKey);
+    if (!targetFolderId) {
+      const cargoFolder = await this.createFolder(cargoFolderName, storeFolderId);
+      targetFolderId = cargoFolder.id;
+      this.folderCache.set(cacheKey, targetFolderId);
+    }
+    return {
+      storeFolderId,
+      targetFolderId,
+      storeFolderName,
+      cargoFolderName
+    };
   }
   /**
    * Realiza o upload multipart (RFC 2387) de um currículo para o Google Drive API v3.
@@ -708,6 +805,8 @@ var GoogleDriveOAuthAdapter = class {
       mimeType: directMetadata?.mimeType || "application/pdf",
       folderId: directMetadata?.folderId,
       lojaId: directMetadata?.lojaId,
+      cargoId: directMetadata?.cargoId,
+      cargoNome: directMetadata?.cargoNome,
       simulateFailure: directMetadata?.simulateFailure
     } : bufferOrOptions;
     if (options.simulateFailure) {
@@ -719,7 +818,17 @@ var GoogleDriveOAuthAdapter = class {
     if (!ALLOWED_CURRICULO_MIMES.includes(options.mimeType)) {
       throw new Error(`GDRIVE_MIME_FORBIDDEN: MIME type '${options.mimeType}' n\xE3o permitido.`);
     }
-    const folderId = options.folderId ? (await this.getFolderMetadata(options.folderId)).id : await this.getFolderForStore(options.lojaId || null);
+    let folderId = options.folderId;
+    if (!folderId) {
+      const resolved = await this.getFolderForStoreAndCargo({
+        lojaId: options.lojaId || null,
+        cargoId: options.cargoId || null,
+        cargoNome: options.cargoNome || null
+      });
+      folderId = resolved.targetFolderId;
+    } else {
+      folderId = (await this.getFolderMetadata(folderId)).id;
+    }
     const ext = options.originalName.includes(".") ? options.originalName.split(".").pop()?.toLowerCase() || "pdf" : "pdf";
     const safeExt = ["pdf", "doc", "docx"].includes(ext) ? ext : "pdf";
     const randomToken = crypto2.randomBytes(16).toString("hex");
@@ -867,21 +976,71 @@ Content-Type: ${options.mimeType}\r
 var GoogleDriveMockAdapter = class _GoogleDriveMockAdapter {
   constructor() {
     this.defaultCorporateFolderId = "gdrive_folder_corp_gigante_rh";
+    this.defaultUnidadesRootFolderId = "gdrive_folder_unidades_root";
+    _GoogleDriveMockAdapter.foldersMap.set(this.defaultCorporateFolderId, {
+      id: this.defaultCorporateFolderId,
+      name: "01 - CORPORATIVO"
+    });
+    _GoogleDriveMockAdapter.foldersMap.set(this.defaultUnidadesRootFolderId, {
+      id: this.defaultUnidadesRootFolderId,
+      name: "02 - UNIDADES FRANQUEADAS"
+    });
   }
   static {
     this.filesMap = /* @__PURE__ */ new Map();
+  }
+  static {
+    this.foldersMap = /* @__PURE__ */ new Map();
   }
   async getFolderForStore(lojaId) {
     if (!lojaId) {
       return this.defaultCorporateFolderId;
     }
-    return `gdrive_folder_loja_${lojaId.replace(/-/g, "").substring(0, 12)}`;
+    const cleanId = lojaId.replace(/[^a-zA-Z0-9]/g, "").substring(0, 12);
+    const storeFolderId = `gdrive_folder_loja_${cleanId}`;
+    if (!_GoogleDriveMockAdapter.foldersMap.has(storeFolderId)) {
+      _GoogleDriveMockAdapter.foldersMap.set(storeFolderId, {
+        id: storeFolderId,
+        name: `Gigante Pneus \u2013 Loja ${cleanId}`,
+        parentId: this.defaultUnidadesRootFolderId
+      });
+    }
+    return storeFolderId;
+  }
+  async getFolderForStoreAndCargo(options) {
+    const storeFolderId = await this.getFolderForStore(options.lojaId || null);
+    const storeObj = _GoogleDriveMockAdapter.foldersMap.get(storeFolderId);
+    const storeFolderName = options.storeName || storeObj?.name || (options.lojaId ? "Gigante Pneus \u2013 Unidade" : "01 - CORPORATIVO");
+    const cargoFolderName = normalizeCargoSubfolderName(options.cargoNome);
+    const cargoSlug = cargoFolderName.toLowerCase().replace(/[^a-z0-9]/g, "_").substring(0, 20);
+    const targetFolderId = `${storeFolderId}_cargo_${cargoSlug}`;
+    if (!_GoogleDriveMockAdapter.foldersMap.has(targetFolderId)) {
+      _GoogleDriveMockAdapter.foldersMap.set(targetFolderId, {
+        id: targetFolderId,
+        name: cargoFolderName,
+        parentId: storeFolderId
+      });
+    }
+    return {
+      storeFolderId,
+      targetFolderId,
+      storeFolderName,
+      cargoFolderName
+    };
   }
   async uploadFile(options) {
     if (options.simulateFailure) {
       throw new Error("GDRIVE_API_ERROR: Falha de comunica\xE7\xE3o ou timeout simulado com a API do Google Drive.");
     }
-    const folderId = options.folderId || await this.getFolderForStore(options.lojaId || null);
+    let folderId = options.folderId;
+    if (!folderId) {
+      const hierarchy = await this.getFolderForStoreAndCargo({
+        lojaId: options.lojaId || null,
+        cargoId: options.cargoId || null,
+        cargoNome: options.cargoNome || null
+      });
+      folderId = hierarchy.targetFolderId;
+    }
     const ext = options.originalName.includes(".") ? options.originalName.split(".").pop()?.toLowerCase() || "dat" : "dat";
     const uniqueToken = crypto3.randomBytes(16).toString("hex");
     const safeFileName = `curriculo_${uniqueToken}.${ext}`;
@@ -923,8 +1082,12 @@ var GoogleDriveMockAdapter = class _GoogleDriveMockAdapter {
   static getStoredFile(fileId) {
     return this.filesMap.get(fileId);
   }
+  static getFolders() {
+    return Array.from(this.foldersMap.values());
+  }
   static clearStorage() {
     this.filesMap.clear();
+    this.foldersMap.clear();
   }
 };
 var mockAdapterInstance = new GoogleDriveMockAdapter();
@@ -948,6 +1111,18 @@ var googleDriveStorage = {
   },
   getFolderForStore(lojaId) {
     return getActiveStorageAdapter().getFolderForStore(lojaId);
+  },
+  getFolderForStoreAndCargo(options) {
+    const adapter = getActiveStorageAdapter();
+    if (adapter.getFolderForStoreAndCargo) {
+      return adapter.getFolderForStoreAndCargo(options);
+    }
+    return adapter.getFolderForStore(options.lojaId || null).then((fid) => ({
+      storeFolderId: fid,
+      targetFolderId: fid,
+      storeFolderName: "Unidade",
+      cargoFolderName: "Geral"
+    }));
   },
   downloadFile(fileId) {
     const adapter = getActiveStorageAdapter();
@@ -1248,11 +1423,14 @@ async function handleCandidatura(payload, clientIp = "127.0.0.1") {
     let driveUpload = null;
     if (hasArquivo && fileBuffer && payload.arquivo) {
       try {
+        const primaryVaga = vagasList[0];
         driveUpload = await googleDriveStorage.uploadFile({
           buffer: fileBuffer,
           originalName: payload.arquivo.nome,
           mimeType: detectedMimeType || "application/pdf",
-          lojaId: vagasList[0]?.loja_id || null,
+          lojaId: primaryVaga?.loja_id || null,
+          cargoId: primaryVaga?.cargo_id || null,
+          cargoNome: primaryVaga?.cargo_id ? void 0 : "Banco de Talentos - Espont\xE2nea",
           simulateFailure: payload.arquivo.simulateFailure === true
         });
       } catch (driveErr) {

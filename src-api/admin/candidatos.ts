@@ -868,6 +868,8 @@ export interface AnexarCurriculoInput {
   nomeArquivo: string;
   mimeType?: string;
   lojaId?: string | null;
+  cargoId?: string | null;
+  cargo?: string | null;
 }
 
 export async function handleAnexarCurriculo(
@@ -938,6 +940,46 @@ export async function handleAnexarCurriculo(
       };
     }
 
+    // 4.1 Resolução da Unidade e Cargo para Organização Hierárquica no Google Drive
+    let resolvedLojaId = payload.lojaId?.trim() || null;
+    let resolvedCargoId = payload.cargoId?.trim() || null;
+    let resolvedCargoNome = payload.cargo?.trim() || null;
+
+    if (!resolvedLojaId || (!resolvedCargoId && !resolvedCargoNome)) {
+      const { data: candidaturas } = await adminClient
+        .from('candidaturas')
+        .select('id, loja_id, cargo_id, status, cargos(titulo, departamento)')
+        .eq('candidato_id', cand.id)
+        .order('criado_em', { ascending: false });
+
+      if (candidaturas && candidaturas.length > 0) {
+        const candAtiva = candidaturas.find((c: any) => c.status !== 'Reprovado' && c.status !== 'Desistente') || candidaturas[0];
+        if (!resolvedLojaId && candAtiva.loja_id) {
+          resolvedLojaId = candAtiva.loja_id;
+        }
+        if (!resolvedCargoId && !resolvedCargoNome) {
+          resolvedCargoId = candAtiva.cargo_id || null;
+          const cargoObj = candAtiva.cargos as any;
+          resolvedCargoNome = cargoObj?.titulo || null;
+        }
+      }
+    }
+
+    const isCorporativoExplicit =
+      resolvedLojaId === 'corporativo' ||
+      resolvedLojaId === '00000000-0000-0000-0000-000000000000';
+
+    if (!resolvedLojaId && !isCorporativoExplicit) {
+      return {
+        statusCode: 422,
+        data: {
+          success: false,
+          error:
+            'INFORMACOES_UNIDADE_AUSENTES: O candidato não possui unidade vinculada nem candidaturas ativas para direcionamento da pasta no Google Drive. Informe lojaId e/ou cargo no payload para anexar o currículo na pasta correta.'
+        }
+      };
+    }
+
     // 5. Upload seguro para o Google Drive corporativo da Gigante Pneus
     let driveUpload;
     try {
@@ -945,7 +987,9 @@ export async function handleAnexarCurriculo(
         buffer,
         originalName: payload.nomeArquivo,
         mimeType: detectedMime,
-        lojaId: payload.lojaId || null
+        lojaId: isCorporativoExplicit ? null : resolvedLojaId,
+        cargoId: resolvedCargoId,
+        cargoNome: resolvedCargoNome
       });
     } catch (driveErr: any) {
       return {

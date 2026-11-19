@@ -1,17 +1,17 @@
 import crypto from 'crypto';
 import { createClient, SupabaseClient } from '@supabase/supabase-js';
-import {
+import type {
   IStorageAdapter,
   StorageUploadOptions,
   StorageUploadResult
-} from './googleDriveStorage';
+} from './googleDriveStorage.ts';
 import {
   DEFAULT_CORPORATE_EMAIL,
   DEFAULT_ROOT_FOLDER_ID,
-  FetchLike,
+  type FetchLike,
   GoogleOAuthService,
   googleOAuthService
-} from './googleOAuthService';
+} from './googleOAuthService.ts';
 
 export const ALLOWED_CURRICULO_MIMES = [
   'application/pdf',
@@ -40,7 +40,99 @@ export interface DirectUploadMetadata {
   mimeType: string;
   folderId?: string | null;
   lojaId?: string | null;
+  cargoId?: string | null;
+  cargoNome?: string | null;
   simulateFailure?: boolean;
+}
+
+/**
+ * Formata o nome da pasta de uma unidade franqueada para o padrão oficial:
+ * "Gigante Pneus – [Cidade/Nome] – [UF]"
+ */
+export function formatStoreFolderName(loja: {
+  nome: string;
+  cidade?: string | null;
+  estado?: string | null;
+}): string {
+  let nome = (loja.nome || '').trim();
+  const uf = (loja.estado || '').trim().toUpperCase();
+
+  // Garante o prefixo oficial "Gigante Pneus"
+  if (!/^gigante\s*pneus/i.test(nome)) {
+    nome = `Gigante Pneus – ${nome}`;
+  }
+
+  // Normaliza hífens para meia-risca (en-dash) com espaços
+  nome = nome.replace(/\s*[-–—]\s*/g, ' – ');
+
+  // Se o estado estiver presente e o nome ainda não terminar com o estado (ex: " – SP")
+  if (uf && !new RegExp(`[–-]\\s*${uf}$`, 'i').test(nome) && !nome.includes(`/${uf}`)) {
+    nome = `${nome} – ${uf}`;
+  }
+
+  return nome;
+}
+
+/**
+ * Normaliza o título da vaga/cargo para nomes padronizados de subpastas no Google Drive.
+ * Agrupa cargos equivalentes e define subpasta própria para candidaturas espontâneas.
+ */
+export function normalizeCargoSubfolderName(rawTitle?: string | null): string {
+  if (!rawTitle || typeof rawTitle !== 'string') {
+    return 'Banco de Talentos - Espontânea';
+  }
+
+  const clean = rawTitle.trim();
+  if (
+    !clean ||
+    clean.toLowerCase() === 'geral' ||
+    clean.toLowerCase().includes('espontanea') ||
+    clean.toLowerCase().includes('espontânea') ||
+    clean.toLowerCase().includes('banco de talentos')
+  ) {
+    return 'Banco de Talentos - Espontânea';
+  }
+
+  const lower = clean.toLowerCase();
+
+  // 1. Mecânico (Mecânico Automotivo, Mecanico de Autos, etc.)
+  if (/mecanic|mecânic/i.test(lower)) {
+    if (/auxiliar.*(mecanic|mecânic)/i.test(lower)) {
+      return 'Auxiliar de Mecânico';
+    }
+    return 'Mecânico';
+  }
+
+  // 2. Alinhador (Alinhador Automotivo, Alinhador de Pneus, etc.)
+  if (/alinhad/i.test(lower)) {
+    return 'Alinhador';
+  }
+
+  // 3. Consultor de Vendas (Vendedor, Consultor Comercial, etc.)
+  if (/vend|comercial|consultor/i.test(lower)) {
+    return 'Consultor de Vendas';
+  }
+
+  // 4. Estoquista (Almoxarife, Controle de Estoque, etc.)
+  if (/estoqu|almoxar/i.test(lower)) {
+    return 'Estoquista';
+  }
+
+  // 5. Auxiliar de Pátio
+  if (/auxiliar.*p[aá]tio/i.test(lower)) {
+    return 'Auxiliar de Pátio';
+  }
+
+  // 6. Recepcionista (Atendente, Recepção, etc.)
+  if (/recep|atendent/i.test(lower)) {
+    return 'Recepcionista';
+  }
+
+  // Fallback limpo: remove barras e caracteres especiais de filesystem
+  return clean
+    .replace(/[/\\?%*:|"<>]/g, ' - ')
+    .replace(/\s+/g, ' ')
+    .trim();
 }
 
 /**
@@ -173,18 +265,18 @@ export class GoogleDriveOAuthAdapter implements IStorageAdapter {
   }
 
   /**
-   * Busca uma subpasta pelo nome exato dentro de `parentId` para evitar duplicação de pastas.
+   * Busca uma subpasta pelo nome exato ou normalizado dentro de `parentId` para evitar duplicação de pastas.
    */
   public async findSubfolderByName(name: string, parentId: string): Promise<DriveFileMetadata | null> {
     const token = await this.oauthService.getValidAccessToken();
-    const escapedName = name.replace(/\\/g, '\\\\').replace(/'/g, "\\'");
+    const cleanName = name.trim();
     const escapedParent = parentId.replace(/\\/g, '\\\\').replace(/'/g, "\\'");
-    const q = `mimeType = '${FOLDER_MIME_TYPE}' and name = '${escapedName}' and '${escapedParent}' in parents and trashed = false`;
+    const q = `mimeType = '${FOLDER_MIME_TYPE}' and '${escapedParent}' in parents and trashed = false`;
 
     const params = new URLSearchParams({
       q,
       fields: 'files(id,name,mimeType,parents,trashed,shared)',
-      pageSize: '1',
+      pageSize: '100',
       spaces: 'drive'
     });
 
@@ -195,11 +287,24 @@ export class GoogleDriveOAuthAdapter implements IStorageAdapter {
     });
 
     if (!res.ok) {
-      throw new Error(`GDRIVE_FOLDER_SEARCH_ERROR: Erro ao buscar subpasta (HTTP ${res.status}).`);
+      throw new Error(`GDRIVE_FOLDER_SEARCH_ERROR: Erro ao buscar subpastas em '${parentId}' (HTTP ${res.status}).`);
     }
 
     const data = (await res.json()) as { files?: DriveFileMetadata[] };
-    return data.files && data.files.length > 0 ? data.files[0] : null;
+    if (!data.files || data.files.length === 0) return null;
+
+    const normalize = (s: string) => s.replace(/[-–—]/g, '-').replace(/\s+/g, ' ').trim().toLowerCase();
+    const targetNorm = normalize(cleanName);
+
+    // 1. Busca exata primeiro
+    const exact = data.files.find(f => f.name === cleanName);
+    if (exact) return exact;
+
+    // 2. Busca normalizada (mesmo nome com variações de traço/espaço)
+    const normalizedMatch = data.files.find(f => normalize(f.name) === targetNorm);
+    if (normalizedMatch) return normalizedMatch;
+
+    return null;
   }
 
   /**
@@ -250,12 +355,12 @@ export class GoogleDriveOAuthAdapter implements IStorageAdapter {
   }
 
   /**
-   * Resolve a pasta de destino para candidaturas corporativas ou de lojas franqueadas:
-   * - Corporativo (lojaId == null): GIGANTE PNEUS - RH / 01 - CORPORATIVO
-   * - Loja (lojaId UUID): GIGANTE PNEUS - RH / 02 - UNIDADES FRANQUEADAS / [UUID_LOJA]
+   * Resolve a pasta de destino da unidade franqueada ou corporativo:
+   * - Corporativo: GIGANTE PNEUS - RH / 01 - CORPORATIVO
+   * - Loja Franqueada: GIGANTE PNEUS - RH / 02 - UNIDADES FRANQUEADAS / Gigante Pneus – [Loja] – [UF]
    */
   public async getFolderForStore(lojaId: string | null): Promise<string> {
-    if (!lojaId) {
+    if (!lojaId || lojaId === 'corporativo' || lojaId === '00000000-0000-0000-0000-000000000000') {
       const envCorpFolder = process.env.GOOGLE_DRIVE_CORP_FOLDER_ID;
       if (envCorpFolder) {
         await this.getFolderMetadata(envCorpFolder);
@@ -270,7 +375,7 @@ export class GoogleDriveOAuthAdapter implements IStorageAdapter {
       return corpFolder.id;
     }
 
-    // Valida formato UUID estrito para nunca usar nomes de candidatos como nomes de pasta
+    // Valida formato UUID estrito
     const cleanLojaId = lojaId.trim();
     if (!/^[0-9a-fA-F-]{8,64}$/.test(cleanLojaId)) {
       throw new Error('GDRIVE_INVALID_STORE_ID: O identificador da loja deve ser um UUID válido.');
@@ -281,22 +386,28 @@ export class GoogleDriveOAuthAdapter implements IStorageAdapter {
       return cachedStoreFolder;
     }
 
-    // 1. Consulta se a loja já possui google_drive_folder_id salvo no banco
+    let lojaRow: { id: string; nome: string; cidade?: string | null; estado?: string | null; google_drive_folder_id?: string | null } | null = null;
+
+    // 1. Consulta metadados da loja no Supabase
     if (this.supabaseAdmin) {
       try {
-        const { data: lojaRow } = await this.supabaseAdmin
+        const { data } = await this.supabaseAdmin
           .from('lojas')
-          .select('google_drive_folder_id')
+          .select('id, nome, cidade, estado, google_drive_folder_id')
           .eq('id', cleanLojaId)
           .maybeSingle();
+        lojaRow = data;
 
+        // Se já possui google_drive_folder_id salvo, verifica se a pasta é válida e não está na lixeira
         if (lojaRow?.google_drive_folder_id && !lojaRow.google_drive_folder_id.startsWith('folder_')) {
           try {
             const existingMeta = await this.getFolderMetadata(lojaRow.google_drive_folder_id);
-            this.folderCache.set(cleanLojaId, existingMeta.id);
-            return existingMeta.id;
+            if (!existingMeta.trashed && existingMeta.mimeType === FOLDER_MIME_TYPE) {
+              this.folderCache.set(cleanLojaId, existingMeta.id);
+              return existingMeta.id;
+            }
           } catch {
-            // Se o ID registrado não for acessível, cria/resolve na árvore oficial
+            // Pasta registrada está inacessível ou na lixeira; resolve/recria com nome padronizado
           }
         }
       } catch {
@@ -312,11 +423,14 @@ export class GoogleDriveOAuthAdapter implements IStorageAdapter {
       this.folderCache.set('__UNIDADES_ROOT__', unidadesRootId);
     }
 
-    // 3. Garante a pasta exclusiva da loja pelo seu UUID real
-    const storeFolder = await this.createFolder(cleanLojaId, unidadesRootId);
+    // 3. Monta o nome oficial padronizado da unidade (ex: "Gigante Pneus – Jundiaí – SP")
+    const storeFolderName = formatStoreFolderName(lojaRow || { nome: cleanLojaId });
+
+    // 4. Localiza ou cria a pasta da unidade sob '02 - UNIDADES FRANQUEADAS'
+    const storeFolder = await this.createFolder(storeFolderName, unidadesRootId);
     this.folderCache.set(cleanLojaId, storeFolder.id);
 
-    // 4. Persiste o ID real da pasta na tabela public.lojas para reutilização futura
+    // 5. Persiste o ID real da pasta na tabela public.lojas para reutilização futura
     if (this.supabaseAdmin) {
       try {
         await this.supabaseAdmin
@@ -329,6 +443,71 @@ export class GoogleDriveOAuthAdapter implements IStorageAdapter {
     }
 
     return storeFolder.id;
+  }
+
+  /**
+   * Resolve a hierarquia completa de armazenamento:
+   * - Unidade Franqueada: GIGANTE PNEUS - RH / 02 - UNIDADES FRANQUEADAS / Gigante Pneus – [Loja] – [UF] / [Cargo Normalizado]
+   * - Corporativo: GIGANTE PNEUS - RH / 01 - CORPORATIVO / [Cargo Normalizado]
+   */
+  public async getFolderForStoreAndCargo(options: {
+    lojaId?: string | null;
+    cargoId?: string | null;
+    cargoNome?: string | null;
+  }): Promise<{
+    storeFolderId: string;
+    targetFolderId: string;
+    storeFolderName: string;
+    cargoFolderName: string;
+  }> {
+    // 1. Resolve a pasta da unidade (ou corporativo)
+    const storeFolderId = await this.getFolderForStore(options.lojaId || null);
+    let storeFolderName = FOLDER_NAME_CORPORATIVO;
+
+    if (options.lojaId && options.lojaId !== 'corporativo') {
+      try {
+        const meta = await this.getFolderMetadata(storeFolderId);
+        storeFolderName = meta.name;
+      } catch {
+        storeFolderName = 'Unidade Franqueada';
+      }
+    }
+
+    // 2. Resolve o nome do cargo (via cargoNome ou consultando cargoId no Supabase)
+    let rawCargo = options.cargoNome?.trim() || null;
+    if (!rawCargo && options.cargoId && this.supabaseAdmin) {
+      try {
+        const { data: cargoRow } = await this.supabaseAdmin
+          .from('cargos')
+          .select('titulo')
+          .eq('id', options.cargoId.trim())
+          .maybeSingle();
+        if (cargoRow?.titulo) {
+          rawCargo = cargoRow.titulo;
+        }
+      } catch {
+        // Fallback
+      }
+    }
+
+    const cargoFolderName = normalizeCargoSubfolderName(rawCargo);
+
+    // 3. Localiza ou cria a subpasta correspondente ao cargo dentro da pasta da loja/corporativo
+    const cacheKey = `cargo_${storeFolderId}_${cargoFolderName}`;
+    let targetFolderId = this.folderCache.get(cacheKey);
+
+    if (!targetFolderId) {
+      const cargoFolder = await this.createFolder(cargoFolderName, storeFolderId);
+      targetFolderId = cargoFolder.id;
+      this.folderCache.set(cacheKey, targetFolderId);
+    }
+
+    return {
+      storeFolderId,
+      targetFolderId,
+      storeFolderName,
+      cargoFolderName
+    };
   }
 
   /**
@@ -346,6 +525,8 @@ export class GoogleDriveOAuthAdapter implements IStorageAdapter {
           mimeType: directMetadata?.mimeType || 'application/pdf',
           folderId: directMetadata?.folderId,
           lojaId: directMetadata?.lojaId,
+          cargoId: directMetadata?.cargoId,
+          cargoNome: directMetadata?.cargoNome,
           simulateFailure: directMetadata?.simulateFailure
         }
       : bufferOrOptions;
@@ -362,10 +543,18 @@ export class GoogleDriveOAuthAdapter implements IStorageAdapter {
       throw new Error(`GDRIVE_MIME_FORBIDDEN: MIME type '${options.mimeType}' não permitido.`);
     }
 
-    // 1. Resolve a pasta de destino e valida acesso
-    const folderId = options.folderId
-      ? (await this.getFolderMetadata(options.folderId)).id
-      : await this.getFolderForStore(options.lojaId || null);
+    // 1. Resolve a pasta de destino (subpasta por cargo dentro da pasta da unidade) e valida acesso
+    let folderId = options.folderId;
+    if (!folderId) {
+      const resolved = await this.getFolderForStoreAndCargo({
+        lojaId: options.lojaId || null,
+        cargoId: options.cargoId || null,
+        cargoNome: options.cargoNome || null
+      });
+      folderId = resolved.targetFolderId;
+    } else {
+      folderId = (await this.getFolderMetadata(folderId)).id;
+    }
 
     // 2. Gera nome seguro e não previsível (sem expor nome do candidato)
     const ext = options.originalName.includes('.')
