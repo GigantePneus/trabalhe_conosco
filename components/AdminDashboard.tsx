@@ -85,6 +85,8 @@ const AdminDashboard: React.FC = () => {
   const [selectedJobLojaId, setSelectedJobLojaId] = useState<string>('');
   
   const [candidatos, setCandidatos] = useState<Candidato[]>([]);
+  const [cidades, setCidades] = useState<ConfigItem[]>([]);
+  const [cargos, setCargos] = useState<ConfigItem[]>([]);
   const [loading, setLoading] = useState(true);
 
   // Filtros Estruturados do Banco de Talentos (Prompt 65 / Prompt 94)
@@ -144,8 +146,6 @@ const AdminDashboard: React.FC = () => {
   const [timelineData, setTimelineData] = useState<{date: string, count: number, fullDate: Date}[]>([]);
   const [heatmapData, setHeatmapData] = useState<number[]>(new Array(24).fill(0));
 
-  const [cidades, setCidades] = useState<ConfigItem[]>([]);
-  const [cargos, setCargos] = useState<ConfigItem[]>([]);
   const [newItem, setNewItem] = useState('');
   const [jobEditorOpen, setJobEditorOpen] = useState(false);
   const [editingCargoId, setEditingCargoId] = useState<string>('');
