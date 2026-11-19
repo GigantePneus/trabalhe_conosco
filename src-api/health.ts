@@ -1,12 +1,14 @@
 export default async function healthHandler(req: any, res: any) {
   res.setHeader('Content-Type', 'application/json');
-  res.setHeader('Cache-Control', 'no-store');
+  res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, max-age=0');
+  res.setHeader('Pragma', 'no-cache');
+  res.setHeader('Expires', '0');
   res.statusCode = 200;
   res.end(JSON.stringify({
     status: 'ok',
     service: 'gigante-pneus-mcp-remote',
     protocol: 'streamable-http',
-    version: '1.2.0',
+    version: '1.3.0',
     timestamp: new Date().toISOString()
   }));
 }
