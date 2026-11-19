@@ -24,6 +24,7 @@ import { createClient, SupabaseClient } from '@supabase/supabase-js';
 import { validateCurriculoFile } from '../../services/security/fileValidator';
 import { validateCpf, maskCpf, generateCpfHash, encryptCpf } from '../../services/security/cpfSecurity';
 import { googleDriveStorage } from '../../services/storage/googleDriveStorage';
+import { convertCurriculoToPdf } from '../../services/storage/curriculoPdfConverter';
 
 let supabaseAdminInstance: SupabaseClient | null = null;
 
@@ -980,13 +981,32 @@ export async function handleAnexarCurriculo(
       };
     }
 
-    // 5. Upload seguro para o Google Drive corporativo da Gigante Pneus
+    // 4.2 Padronização e Conversão Institucional para PDF (PDF, DOC, DOCX, RTF, JPG, JPEG, PNG)
+    let convertedPdfResult;
+    try {
+      convertedPdfResult = await convertCurriculoToPdf({
+        buffer,
+        originalName: payload.nomeArquivo,
+        format: fileValidation.detectedFormat!
+      });
+    } catch (convErr: any) {
+      // "Se a conversão falhar, registrar o erro e não marcar o currículo como concluído."
+      return {
+        statusCode: 422,
+        data: {
+          success: false,
+          error: `FALHA_CONVERSAO_PDF: O arquivo não pôde ser padronizado para PDF institucional: ${convErr.message}`
+        }
+      };
+    }
+
+    // 5. Upload seguro para o Google Drive corporativo da Gigante Pneus (sempre em PDF padronizado)
     let driveUpload;
     try {
       driveUpload = await googleDriveStorage.uploadFile({
-        buffer,
-        originalName: payload.nomeArquivo,
-        mimeType: detectedMime,
+        buffer: convertedPdfResult.pdfBuffer,
+        originalName: convertedPdfResult.pdfFileName,
+        mimeType: 'application/pdf',
         lojaId: isCorporativoExplicit ? null : resolvedLojaId,
         cargoId: resolvedCargoId,
         cargoNome: resolvedCargoNome
@@ -1008,9 +1028,9 @@ export async function handleAnexarCurriculo(
         candidato_id: cand.id,
         google_drive_file_id: driveUpload.fileId,
         google_drive_folder_id: driveUpload.folderId,
-        nome_arquivo: driveUpload.fileName || payload.nomeArquivo,
-        mime_type: driveUpload.mimeType || detectedMime,
-        tamanho_bytes: driveUpload.tamanhoBytes || buffer.length,
+        nome_arquivo: driveUpload.fileName || convertedPdfResult.pdfFileName,
+        mime_type: 'application/pdf',
+        tamanho_bytes: driveUpload.tamanhoBytes || convertedPdfResult.pdfBuffer.length,
         md5_checksum: md5Checksum,
         upload_status: 'concluido'
       })
@@ -1049,8 +1069,13 @@ export async function handleAnexarCurriculo(
         success: true,
         curriculo_id: novoCurriculo.id,
         nome_arquivo: novoCurriculo.nome_arquivo,
+        mime_type: novoCurriculo.mime_type,
         tamanho_bytes: novoCurriculo.tamanho_bytes,
-        mensagem: 'Currículo anexado e armazenado com sucesso no Google Drive corporativo.',
+        convertido_para_pdf: convertedPdfResult.converted,
+        formato_original: convertedPdfResult.originalFormat,
+        mensagem: convertedPdfResult.converted
+          ? `Currículo (${convertedPdfResult.originalFormat.toUpperCase()}) padronizado com sucesso para PDF institucional e armazenado no Google Drive.`
+          : 'Currículo anexado e armazenado com sucesso no Google Drive corporativo.',
         url_visualizacao: `/api/curriculos/visualizar?id=${novoCurriculo.id}`
       }
     };
@@ -1058,6 +1083,12 @@ export async function handleAnexarCurriculo(
     return { statusCode: 500, data: { success: false, error: err.message || 'Erro interno' } };
   }
 }
+
+/**
+ * Alias de importação de currículos do Drive institucional, reutilizando integralmente a lógica de
+ * validação, conversão para PDF, deduplicação por hash e organização hierárquica por loja e cargo.
+ */
+export const handleImportarCurriculoDrive = handleAnexarCurriculo;
 
 // ─── 7. CONSULTAR CURRÍCULOS ──────────────────────────────────────────────────
 
@@ -1367,7 +1398,7 @@ export default async function vercelAdminCandidatosHandler(req: any, res: any) {
         return res.status(result.statusCode).json(result.data);
       }
 
-      if (acao === 'anexar_curriculo' || acao === 'curriculo') {
+      if (acao === 'anexar_curriculo' || acao === 'curriculo' || acao === 'importar_curriculo_drive') {
         const result = await handleAnexarCurriculo(body, token);
         return res.status(result.statusCode).json(result.data);
       }

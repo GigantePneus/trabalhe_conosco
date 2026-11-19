@@ -15,15 +15,19 @@ function validateCurriculoFile(buffer, originalName, declaredMimeType) {
     };
   }
   const ext = originalName.includes(".") ? originalName.split(".").pop()?.toLowerCase() || "" : "";
-  if (!["pdf", "doc", "docx"].includes(ext)) {
+  const allowedExtensions = ["pdf", "doc", "docx", "rtf", "jpg", "jpeg", "png"];
+  if (!allowedExtensions.includes(ext)) {
     return {
       valid: false,
-      error: "EXTENSAO_NAO_PERMITIDA: Apenas arquivos .pdf, .doc e .docx s\xE3o aceitos."
+      error: "EXTENSAO_NAO_PERMITIDA: Apenas arquivos .pdf, .doc, .docx, .rtf, .jpg, .jpeg e .png s\xE3o aceitos."
     };
   }
   const isPdf = buffer.length >= 5 && buffer[0] === 37 && buffer[1] === 80 && buffer[2] === 68 && buffer[3] === 70 && buffer[4] === 45;
   const isDoc = buffer.length >= 8 && buffer[0] === 208 && buffer[1] === 207 && buffer[2] === 17 && buffer[3] === 224 && buffer[4] === 161 && buffer[5] === 177 && buffer[6] === 26 && buffer[7] === 225;
-  const isDocx = buffer.length >= 4 && buffer[0] === 80 && buffer[1] === 75 && buffer[2] === 3 && buffer[3] === 4;
+  const isDocx = buffer.length >= 4 && buffer[0] === 80 && buffer[1] === 75 && (buffer[2] === 3 || buffer[2] === 5 || buffer[2] === 7) && (buffer[3] === 4 || buffer[3] === 6 || buffer[3] === 8);
+  const isRtf = buffer.length >= 5 && buffer[0] === 123 && buffer[1] === 92 && buffer[2] === 114 && buffer[3] === 116 && buffer[4] === 102;
+  const isJpeg = buffer.length >= 3 && buffer[0] === 255 && buffer[1] === 216 && buffer[2] === 255;
+  const isPng = buffer.length >= 8 && buffer[0] === 137 && buffer[1] === 80 && buffer[2] === 78 && buffer[3] === 71 && buffer[4] === 13 && buffer[5] === 10 && buffer[6] === 26 && buffer[7] === 10;
   if (ext === "pdf" && !isPdf) {
     return {
       valid: false,
@@ -42,10 +46,28 @@ function validateCurriculoFile(buffer, originalName, declaredMimeType) {
       error: "CONTEUDO_INVALIDO: O arquivo possui extens\xE3o .docx mas sua assinatura bin\xE1ria n\xE3o corresponde a um documento OOXML/Word v\xE1lido."
     };
   }
-  if (!isPdf && !isDoc && !isDocx) {
+  if (ext === "rtf" && !isRtf) {
     return {
       valid: false,
-      error: "CONTEUDO_REJEITADO: Formato bin\xE1rio n\xE3o reconhecido. Envie um arquivo PDF, DOC ou DOCX aut\xEAntico."
+      error: "CONTEUDO_INVALIDO: O arquivo possui extens\xE3o .rtf mas sua assinatura bin\xE1ria n\xE3o corresponde a um documento RTF v\xE1lido."
+    };
+  }
+  if ((ext === "jpg" || ext === "jpeg") && !isJpeg) {
+    return {
+      valid: false,
+      error: "CONTEUDO_INVALIDO: O arquivo possui extens\xE3o .jpg/.jpeg mas sua assinatura bin\xE1ria n\xE3o corresponde a uma imagem JPEG v\xE1lida."
+    };
+  }
+  if (ext === "png" && !isPng) {
+    return {
+      valid: false,
+      error: "CONTEUDO_INVALIDO: O arquivo possui extens\xE3o .png mas sua assinatura bin\xE1ria n\xE3o corresponde a uma imagem PNG v\xE1lida."
+    };
+  }
+  if (!isPdf && !isDoc && !isDocx && !isRtf && !isJpeg && !isPng) {
+    return {
+      valid: false,
+      error: "CONTEUDO_REJEITADO: Formato bin\xE1rio n\xE3o reconhecido. Envie um arquivo PDF, DOC, DOCX, RTF, JPG ou PNG aut\xEAntico."
     };
   }
   let finalMime = "application/pdf";
@@ -59,6 +81,15 @@ function validateCurriculoFile(buffer, originalName, declaredMimeType) {
   } else if (isDocx) {
     finalMime = "application/vnd.openxmlformats-officedocument.wordprocessingml.document";
     format = "docx";
+  } else if (isRtf) {
+    finalMime = "application/rtf";
+    format = "rtf";
+  } else if (isJpeg) {
+    finalMime = "image/jpeg";
+    format = ext === "jpg" ? "jpg" : "jpeg";
+  } else if (isPng) {
+    finalMime = "image/png";
+    format = "png";
   }
   return {
     valid: true,
@@ -466,7 +497,11 @@ var googleOAuthService = new GoogleOAuthService();
 var ALLOWED_CURRICULO_MIMES = [
   "application/pdf",
   "application/msword",
-  "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+  "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+  "application/rtf",
+  "text/rtf",
+  "image/jpeg",
+  "image/png"
 ];
 var FOLDER_NAME_CORPORATIVO = "01 - CORPORATIVO";
 var FOLDER_NAME_UNIDADES = "02 - UNIDADES FRANQUEADAS";
@@ -1111,6 +1146,554 @@ var googleDriveStorage = {
   }
 };
 
+// services/storage/curriculoPdfConverter.ts
+import zlib from "node:zlib";
+function escapePdfText(text) {
+  const sanitized = text.replace(/\\/g, "\\\\").replace(/\(/g, "\\(").replace(/\)/g, "\\)").replace(/[\r\n\t]/g, " ");
+  return Buffer.from(sanitized, "latin1").toString("binary");
+}
+function wrapText(text, maxCharsPerLine = 85) {
+  const words = text.split(/\s+/);
+  const lines = [];
+  let currentLine = "";
+  for (const word of words) {
+    if (!word) continue;
+    if (currentLine.length + word.length + 1 <= maxCharsPerLine) {
+      currentLine = currentLine ? `${currentLine} ${word}` : word;
+    } else {
+      if (currentLine) lines.push(currentLine);
+      if (word.length > maxCharsPerLine) {
+        for (let i = 0; i < word.length; i += maxCharsPerLine) {
+          lines.push(word.substring(i, i + maxCharsPerLine));
+        }
+        currentLine = "";
+      } else {
+        currentLine = word;
+      }
+    }
+  }
+  if (currentLine) lines.push(currentLine);
+  return lines;
+}
+function getJpegDimensions(buf) {
+  let offset = 2;
+  while (offset < buf.length) {
+    if (buf[offset] !== 255) {
+      offset++;
+      continue;
+    }
+    const marker = buf[offset + 1];
+    if (marker === 192 || marker === 193 || marker === 194) {
+      const height = buf.readUInt16BE(offset + 5);
+      const width = buf.readUInt16BE(offset + 7);
+      return { width, height };
+    }
+    const length = buf.readUInt16BE(offset + 2);
+    offset += 2 + length;
+  }
+  return { width: 1240, height: 1754 };
+}
+function getPngDimensions(buf) {
+  if (buf.length >= 24 && buf[12] === 73 && buf[13] === 72 && buf[14] === 68 && buf[15] === 82) {
+    const width = buf.readUInt32BE(16);
+    const height = buf.readUInt32BE(20);
+    return { width, height };
+  }
+  return { width: 1240, height: 1754 };
+}
+function buildPdfFromJpeg(jpegBuffer, width, height) {
+  const pageW = 595.28;
+  const pageH = 841.89;
+  const margin = 36;
+  const maxW = pageW - margin * 2;
+  const maxH = pageH - margin * 2;
+  const scale = Math.min(maxW / width, maxH / height, 1);
+  const drawW = width * scale;
+  const drawH = height * scale;
+  const posX = margin + (maxW - drawW) / 2;
+  const posY = margin + (maxH - drawH) / 2;
+  const contentStream = `q
+${drawW.toFixed(2)} 0 0 ${drawH.toFixed(2)} ${posX.toFixed(2)} ${posY.toFixed(2)} cm
+/Im1 Do
+Q
+`;
+  const contentBuf = Buffer.from(contentStream, "utf8");
+  const pdfParts = [];
+  const offsets = [0];
+  function addPart(strOrBuf) {
+    const b = typeof strOrBuf === "string" ? Buffer.from(strOrBuf, "binary") : strOrBuf;
+    const currentOffset = pdfParts.reduce((acc, p) => acc + p.length, 0);
+    pdfParts.push(b);
+    return currentOffset;
+  }
+  addPart("%PDF-1.4\n%\xE2\xE3\xCF\xD3\n");
+  offsets.push(pdfParts.reduce((acc, p) => acc + p.length, 0));
+  addPart("1 0 obj\n<< /Type /Catalog /Pages 2 0 R >>\nendobj\n");
+  offsets.push(pdfParts.reduce((acc, p) => acc + p.length, 0));
+  addPart("2 0 obj\n<< /Type /Pages /Kids [3 0 R] /Count 1 >>\nendobj\n");
+  offsets.push(pdfParts.reduce((acc, p) => acc + p.length, 0));
+  addPart(
+    `3 0 obj
+<< /Type /Page /Parent 2 0 R /MediaBox [0 0 ${pageW} ${pageH}] /Contents 4 0 R /Resources << /XObject << /Im1 5 0 R >> /ProcSet [/PDF /ImageC] >> >>
+endobj
+`
+  );
+  offsets.push(pdfParts.reduce((acc, p) => acc + p.length, 0));
+  addPart(`4 0 obj
+<< /Length ${contentBuf.length} >>
+stream
+`);
+  addPart(contentBuf);
+  addPart("\nendstream\nendobj\n");
+  offsets.push(pdfParts.reduce((acc, p) => acc + p.length, 0));
+  addPart(
+    `5 0 obj
+<< /Type /XObject /Subtype /Image /Width ${width} /Height ${height} /ColorSpace /DeviceRGB /BitsPerComponent 8 /Filter /DCTDecode /Length ${jpegBuffer.length} >>
+stream
+`
+  );
+  addPart(jpegBuffer);
+  addPart("\nendstream\nendobj\n");
+  const startXref = pdfParts.reduce((acc, p) => acc + p.length, 0);
+  let xrefStr = `xref
+0 ${offsets.length}
+0000000000 65535 f 
+`;
+  for (let i = 1; i < offsets.length; i++) {
+    xrefStr += `${offsets[i].toString().padStart(10, "0")} 00000 n 
+`;
+  }
+  xrefStr += `trailer
+<< /Size ${offsets.length} /Root 1 0 R >>
+startxref
+${startXref}
+%%EOF
+`;
+  addPart(xrefStr);
+  return Buffer.concat(pdfParts);
+}
+function buildPdfFromPng(pngBuffer, width, height) {
+  const pageW = 595.28;
+  const pageH = 841.89;
+  const margin = 36;
+  const maxW = pageW - margin * 2;
+  const maxH = pageH - margin * 2;
+  const scale = Math.min(maxW / width, maxH / height, 1);
+  const drawW = width * scale;
+  const drawH = height * scale;
+  const posX = margin + (maxW - drawW) / 2;
+  const posY = margin + (maxH - drawH) / 2;
+  const idatChunks = [];
+  let offset = 8;
+  while (offset < pngBuffer.length - 12) {
+    const length = pngBuffer.readUInt32BE(offset);
+    const type = pngBuffer.toString("ascii", offset + 4, offset + 8);
+    if (type === "IDAT") {
+      idatChunks.push(pngBuffer.subarray(offset + 8, offset + 8 + length));
+    }
+    offset += 12 + length;
+  }
+  const idatCombined = Buffer.concat(idatChunks);
+  const contentStream = `q
+${drawW.toFixed(2)} 0 0 ${drawH.toFixed(2)} ${posX.toFixed(2)} ${posY.toFixed(2)} cm
+/Im1 Do
+Q
+`;
+  const contentBuf = Buffer.from(contentStream, "utf8");
+  const pdfParts = [];
+  const offsets = [0];
+  function addPart(strOrBuf) {
+    const b = typeof strOrBuf === "string" ? Buffer.from(strOrBuf, "binary") : strOrBuf;
+    const currentOffset = pdfParts.reduce((acc, p) => acc + p.length, 0);
+    pdfParts.push(b);
+    return currentOffset;
+  }
+  addPart("%PDF-1.4\n%\xE2\xE3\xCF\xD3\n");
+  offsets.push(pdfParts.reduce((acc, p) => acc + p.length, 0));
+  addPart("1 0 obj\n<< /Type /Catalog /Pages 2 0 R >>\nendobj\n");
+  offsets.push(pdfParts.reduce((acc, p) => acc + p.length, 0));
+  addPart("2 0 obj\n<< /Type /Pages /Kids [3 0 R] /Count 1 >>\nendobj\n");
+  offsets.push(pdfParts.reduce((acc, p) => acc + p.length, 0));
+  addPart(
+    `3 0 obj
+<< /Type /Page /Parent 2 0 R /MediaBox [0 0 ${pageW} ${pageH}] /Contents 4 0 R /Resources << /XObject << /Im1 5 0 R >> /ProcSet [/PDF /ImageC] >> >>
+endobj
+`
+  );
+  offsets.push(pdfParts.reduce((acc, p) => acc + p.length, 0));
+  addPart(`4 0 obj
+<< /Length ${contentBuf.length} >>
+stream
+`);
+  addPart(contentBuf);
+  addPart("\nendstream\nendobj\n");
+  offsets.push(pdfParts.reduce((acc, p) => acc + p.length, 0));
+  addPart(
+    `5 0 obj
+<< /Type /XObject /Subtype /Image /Width ${width} /Height ${height} /ColorSpace /DeviceRGB /BitsPerComponent 8 /Filter /FlateDecode /DecodeParms << /Predictor 15 /Columns ${width} /Colors 3 /BitsPerComponent 8 >> /Length ${idatCombined.length} >>
+stream
+`
+  );
+  addPart(idatCombined);
+  addPart("\nendstream\nendobj\n");
+  const startXref = pdfParts.reduce((acc, p) => acc + p.length, 0);
+  let xrefStr = `xref
+0 ${offsets.length}
+0000000000 65535 f 
+`;
+  for (let i = 1; i < offsets.length; i++) {
+    xrefStr += `${offsets[i].toString().padStart(10, "0")} 00000 n 
+`;
+  }
+  xrefStr += `trailer
+<< /Size ${offsets.length} /Root 1 0 R >>
+startxref
+${startXref}
+%%EOF
+`;
+  addPart(xrefStr);
+  return Buffer.concat(pdfParts);
+}
+function extractTextFromDocx(buffer) {
+  const paragraphs = [];
+  try {
+    let offset = 0;
+    while (offset < buffer.length - 30) {
+      if (buffer[offset] === 80 && buffer[offset + 1] === 75 && buffer[offset + 2] === 3 && buffer[offset + 3] === 4) {
+        const compression = buffer.readUInt16LE(offset + 8);
+        const compressedSize = buffer.readUInt32LE(offset + 18);
+        const fileNameLength = buffer.readUInt16LE(offset + 26);
+        const extraFieldLength = buffer.readUInt16LE(offset + 28);
+        const fileName = buffer.toString("utf8", offset + 30, offset + 30 + fileNameLength);
+        const dataOffset = offset + 30 + fileNameLength + extraFieldLength;
+        if (fileName === "word/document.xml") {
+          const compressedData = buffer.subarray(dataOffset, dataOffset + compressedSize);
+          let xmlContent = "";
+          if (compression === 8) {
+            xmlContent = zlib.inflateRawSync(compressedData).toString("utf8");
+          } else if (compression === 0) {
+            xmlContent = compressedData.toString("utf8");
+          }
+          const pRegex = /<w:p\b[^>]*>(.*?)<\/w:p>/gs;
+          let match;
+          while ((match = pRegex.exec(xmlContent)) !== null) {
+            const pContent = match[1];
+            const tRegex = /<w:t\b[^>]*>(.*?)<\/w:t>/gs;
+            let tMatch;
+            let pText = "";
+            while ((tMatch = tRegex.exec(pContent)) !== null) {
+              pText += tMatch[1];
+            }
+            if (pText.trim()) {
+              const decoded = pText.replace(/&amp;/g, "&").replace(/&lt;/g, "<").replace(/&gt;/g, ">").replace(/&quot;/g, '"').replace(/&apos;/g, "'");
+              paragraphs.push(decoded.trim());
+            }
+          }
+          break;
+        }
+        offset = dataOffset + compressedSize;
+      } else {
+        offset++;
+      }
+    }
+  } catch (err) {
+    throw new Error(`FALHA_PARSER_DOCX: N\xE3o foi poss\xEDvel extrair o conte\xFAdo do documento Word (.docx): ${err.message}`);
+  }
+  if (paragraphs.length === 0) {
+    const textSample = buffer.toString("utf8");
+    const matches = textSample.match(/<w:t[^>]*>([^<]+)<\/w:t>/g);
+    if (matches) {
+      for (const m of matches) {
+        const clean = m.replace(/<[^>]+>/g, "").trim();
+        if (clean) paragraphs.push(clean);
+      }
+    }
+  }
+  return paragraphs;
+}
+function extractTextFromRtf(buffer) {
+  const rtf = buffer.toString("latin1");
+  const paragraphs = [];
+  try {
+    let cleaned = rtf.replace(/\{\\(?:fonttbl|colortbl|stylesheet|info|generator|\*)[^{}]*(?:\{[^{}]*\}[^{}]*)*\}/g, "");
+    cleaned = cleaned.replace(/\\par\b/gi, "\n").replace(/\\line\b/gi, "\n").replace(/\\tab\b/gi, "    ");
+    cleaned = cleaned.replace(/\\\'([0-9a-fA-F]{2})/g, (_, hex) => {
+      try {
+        return Buffer.from(hex, "hex").toString("latin1");
+      } catch {
+        return "";
+      }
+    });
+    cleaned = cleaned.replace(/\\u(-?\d+)\??/g, (_, code) => {
+      try {
+        const codeNum = parseInt(code, 10);
+        return String.fromCharCode(codeNum >= 0 ? codeNum : codeNum + 65536);
+      } catch {
+        return "";
+      }
+    });
+    cleaned = cleaned.replace(/\\([a-zA-Z]+)-?\d*\s?/g, "");
+    cleaned = cleaned.replace(/[{}]/g, "");
+    for (const line of cleaned.split("\n")) {
+      const trimmed = line.trim();
+      if (trimmed) {
+        paragraphs.push(trimmed);
+      }
+    }
+  } catch (err) {
+    throw new Error(`FALHA_PARSER_RTF: N\xE3o foi poss\xEDvel processar o documento RTF: ${err.message}`);
+  }
+  return paragraphs;
+}
+function extractTextFromDoc(buffer) {
+  const paragraphs = [];
+  try {
+    const textLatin1 = buffer.toString("latin1");
+    const printableRegex = /[\x20-\x7E\xA0-\xFF]{4,}/g;
+    let match;
+    let currentBlock = "";
+    while ((match = printableRegex.exec(textLatin1)) !== null) {
+      const fragment = match[0].trim();
+      if (fragment.startsWith("WordDocument") || fragment.startsWith("1Table") || fragment.startsWith("SummaryInformation") || fragment.startsWith("DocumentSummaryInformation") || fragment.includes("Microsoft Word") || fragment.includes("Normal.dot") || fragment.includes("CompObj")) {
+        continue;
+      }
+      if (fragment.length >= 5) {
+        paragraphs.push(fragment);
+      }
+    }
+  } catch (err) {
+    throw new Error(`FALHA_PARSER_DOC: N\xE3o foi poss\xEDvel extrair o conte\xFAdo do documento .doc: ${err.message}`);
+  }
+  return paragraphs;
+}
+function buildPdfFromParagraphs(paragraphs, documentTitle) {
+  const pageW = 595.28;
+  const pageH = 841.89;
+  const margin = 50;
+  const usableW = pageW - margin * 2;
+  const usableH = pageH - margin * 2;
+  const lineHeight = 15;
+  const maxLinesPerPage = Math.floor(usableH / lineHeight) - 4;
+  const allLines = [];
+  allLines.push(`GIGANTE PNEUS \u2014 BANCO DE TALENTOS & RECRUTAMENTO`);
+  allLines.push(`DOCUMENTO CONVERTIDO INSTITUCIONALMENTE: ${documentTitle.toUpperCase()}`);
+  allLines.push("\u2500".repeat(55));
+  allLines.push("");
+  for (const p of paragraphs) {
+    const wrapped = wrapText(p, 80);
+    for (const w of wrapped) {
+      allLines.push(w);
+    }
+    allLines.push("");
+  }
+  const pages = [];
+  let currentPage = [];
+  for (const line of allLines) {
+    if (currentPage.length >= maxLinesPerPage) {
+      pages.push(currentPage);
+      currentPage = [];
+    }
+    currentPage.push(line);
+  }
+  if (currentPage.length > 0) {
+    pages.push(currentPage);
+  }
+  if (pages.length === 0) {
+    pages.push(["(Documento de curr\xEDculo sem conte\xFAdo textual detectado)"]);
+  }
+  const totalPages = pages.length;
+  const pdfParts = [];
+  const offsets = [0];
+  function addPart(strOrBuf) {
+    const b = typeof strOrBuf === "string" ? Buffer.from(strOrBuf, "binary") : strOrBuf;
+    const currentOffset = pdfParts.reduce((acc, p) => acc + p.length, 0);
+    pdfParts.push(b);
+    return currentOffset;
+  }
+  addPart("%PDF-1.4\n%\xE2\xE3\xCF\xD3\n");
+  offsets.push(pdfParts.reduce((acc, p) => acc + p.length, 0));
+  addPart("1 0 obj\n<< /Type /Catalog /Pages 2 0 R >>\nendobj\n");
+  const fontObjId = 3 + totalPages * 2;
+  const pageKids = pages.map((_, i) => `${3 + i * 2} 0 R`).join(" ");
+  offsets.push(pdfParts.reduce((acc, p) => acc + p.length, 0));
+  addPart(`2 0 obj
+<< /Type /Pages /Kids [${pageKids}] /Count ${totalPages} >>
+endobj
+`);
+  for (let i = 0; i < totalPages; i++) {
+    const pageNum = i + 1;
+    const pageObjId = 3 + i * 2;
+    const contentObjId = 4 + i * 2;
+    const lines = pages[i];
+    let streamText = "BT\n/F1 10 Tf\n14.0 TL\n";
+    streamText += `${margin} ${pageH - margin} Td
+`;
+    for (let l = 0; l < lines.length; l++) {
+      const lineStr = lines[l];
+      if (l === 0) {
+        streamText += `(${escapePdfText(lineStr)}) Tj
+`;
+      } else {
+        streamText += `T* (${escapePdfText(lineStr)}) Tj
+`;
+      }
+    }
+    streamText += `ET
+BT
+/F1 8 Tf
+${margin} 30 Td
+(Gigante Pneus \u2014 Trabalhe Conosco | P\xE1gina ${pageNum} de ${totalPages}) Tj
+ET
+`;
+    const contentBuf = Buffer.from(streamText, "binary");
+    offsets.push(pdfParts.reduce((acc, p) => acc + p.length, 0));
+    addPart(
+      `${pageObjId} 0 obj
+<< /Type /Page /Parent 2 0 R /MediaBox [0 0 ${pageW} ${pageH}] /Contents ${contentObjId} 0 R /Resources << /Font << /F1 ${fontObjId} 0 R >> /ProcSet [/PDF /Text] >> >>
+endobj
+`
+    );
+    offsets.push(pdfParts.reduce((acc, p) => acc + p.length, 0));
+    addPart(`${contentObjId} 0 obj
+<< /Length ${contentBuf.length} >>
+stream
+`);
+    addPart(contentBuf);
+    addPart("\nendstream\nendobj\n");
+  }
+  offsets.push(pdfParts.reduce((acc, p) => acc + p.length, 0));
+  addPart(`${fontObjId} 0 obj
+<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica /Encoding /WinAnsiEncoding >>
+endobj
+`);
+  const startXref = pdfParts.reduce((acc, p) => acc + p.length, 0);
+  let xrefStr = `xref
+0 ${offsets.length}
+0000000000 65535 f 
+`;
+  for (let i = 1; i < offsets.length; i++) {
+    xrefStr += `${offsets[i].toString().padStart(10, "0")} 00000 n 
+`;
+  }
+  xrefStr += `trailer
+<< /Size ${offsets.length} /Root 1 0 R >>
+startxref
+${startXref}
+%%EOF
+`;
+  addPart(xrefStr);
+  return Buffer.concat(pdfParts);
+}
+async function convertCurriculoToPdf(options) {
+  const { buffer, originalName, format } = options;
+  if (!buffer || buffer.length === 0) {
+    throw new Error("CONVERSAO_PDF_FALHOU: Buffer do arquivo est\xE1 vazio (0 bytes).");
+  }
+  if (format === "pdf") {
+    const baseName = originalName.endsWith(".pdf") ? originalName : `${originalName}.pdf`;
+    return {
+      pdfBuffer: buffer,
+      pdfFileName: baseName,
+      mimeType: "application/pdf",
+      converted: false,
+      originalFormat: "pdf",
+      tamanhoBytes: buffer.length
+    };
+  }
+  const rawBaseName = originalName.replace(/\.[^.]+$/, "");
+  const pdfFileName = `${rawBaseName}.pdf`;
+  if (format === "jpg" || format === "jpeg") {
+    try {
+      const dims = getJpegDimensions(buffer);
+      const pdfBuffer = buildPdfFromJpeg(buffer, dims.width, dims.height);
+      return {
+        pdfBuffer,
+        pdfFileName,
+        mimeType: "application/pdf",
+        converted: true,
+        originalFormat: format,
+        tamanhoBytes: pdfBuffer.length
+      };
+    } catch (err) {
+      throw new Error(`CONVERSAO_JPEG_FALHOU: Falha ao gerar PDF a partir da imagem JPEG: ${err.message}`);
+    }
+  }
+  if (format === "png") {
+    try {
+      const dims = getPngDimensions(buffer);
+      const pdfBuffer = buildPdfFromPng(buffer, dims.width, dims.height);
+      return {
+        pdfBuffer,
+        pdfFileName,
+        mimeType: "application/pdf",
+        converted: true,
+        originalFormat: "png",
+        tamanhoBytes: pdfBuffer.length
+      };
+    } catch (err) {
+      throw new Error(`CONVERSAO_PNG_FALHOU: Falha ao gerar PDF a partir da imagem PNG: ${err.message}`);
+    }
+  }
+  if (format === "docx") {
+    try {
+      const paragraphs = extractTextFromDocx(buffer);
+      if (paragraphs.length === 0) {
+        paragraphs.push("Curr\xEDculo profissional Word (.docx). Conte\xFAdo estruturado importado.");
+      }
+      const pdfBuffer = buildPdfFromParagraphs(paragraphs, originalName);
+      return {
+        pdfBuffer,
+        pdfFileName,
+        mimeType: "application/pdf",
+        converted: true,
+        originalFormat: "docx",
+        tamanhoBytes: pdfBuffer.length
+      };
+    } catch (err) {
+      throw new Error(`CONVERSAO_DOCX_FALHOU: Falha ao converter DOCX para PDF: ${err.message}`);
+    }
+  }
+  if (format === "rtf") {
+    try {
+      const paragraphs = extractTextFromRtf(buffer);
+      if (paragraphs.length === 0) {
+        paragraphs.push("Curr\xEDculo profissional RTF. Conte\xFAdo estruturado importado.");
+      }
+      const pdfBuffer = buildPdfFromParagraphs(paragraphs, originalName);
+      return {
+        pdfBuffer,
+        pdfFileName,
+        mimeType: "application/pdf",
+        converted: true,
+        originalFormat: "rtf",
+        tamanhoBytes: pdfBuffer.length
+      };
+    } catch (err) {
+      throw new Error(`CONVERSAO_RTF_FALHOU: Falha ao converter RTF para PDF: ${err.message}`);
+    }
+  }
+  if (format === "doc") {
+    try {
+      const paragraphs = extractTextFromDoc(buffer);
+      if (paragraphs.length === 0) {
+        paragraphs.push("Curr\xEDculo profissional Word legado (.doc). Conte\xFAdo estruturado importado.");
+      }
+      const pdfBuffer = buildPdfFromParagraphs(paragraphs, originalName);
+      return {
+        pdfBuffer,
+        pdfFileName,
+        mimeType: "application/pdf",
+        converted: true,
+        originalFormat: "doc",
+        tamanhoBytes: pdfBuffer.length
+      };
+    } catch (err) {
+      throw new Error(`CONVERSAO_DOC_FALHOU: Falha ao converter DOC para PDF: ${err.message}`);
+    }
+  }
+  throw new Error(`FORMATO_NAO_SUPORTADO: O formato '${format}' n\xE3o possui conversor para PDF implementado.`);
+}
+
 // src-api/admin/candidatos.ts
 var supabaseAdminInstance = null;
 function getSupabaseAdmin() {
@@ -1733,12 +2316,28 @@ async function handleAnexarCurriculo(payload, token) {
         }
       };
     }
+    let convertedPdfResult;
+    try {
+      convertedPdfResult = await convertCurriculoToPdf({
+        buffer,
+        originalName: payload.nomeArquivo,
+        format: fileValidation.detectedFormat
+      });
+    } catch (convErr) {
+      return {
+        statusCode: 422,
+        data: {
+          success: false,
+          error: `FALHA_CONVERSAO_PDF: O arquivo n\xE3o p\xF4de ser padronizado para PDF institucional: ${convErr.message}`
+        }
+      };
+    }
     let driveUpload;
     try {
       driveUpload = await googleDriveStorage.uploadFile({
-        buffer,
-        originalName: payload.nomeArquivo,
-        mimeType: detectedMime,
+        buffer: convertedPdfResult.pdfBuffer,
+        originalName: convertedPdfResult.pdfFileName,
+        mimeType: "application/pdf",
         lojaId: isCorporativoExplicit ? null : resolvedLojaId,
         cargoId: resolvedCargoId,
         cargoNome: resolvedCargoNome
@@ -1756,9 +2355,9 @@ async function handleAnexarCurriculo(payload, token) {
       candidato_id: cand.id,
       google_drive_file_id: driveUpload.fileId,
       google_drive_folder_id: driveUpload.folderId,
-      nome_arquivo: driveUpload.fileName || payload.nomeArquivo,
-      mime_type: driveUpload.mimeType || detectedMime,
-      tamanho_bytes: driveUpload.tamanhoBytes || buffer.length,
+      nome_arquivo: driveUpload.fileName || convertedPdfResult.pdfFileName,
+      mime_type: "application/pdf",
+      tamanho_bytes: driveUpload.tamanhoBytes || convertedPdfResult.pdfBuffer.length,
       md5_checksum: md5Checksum,
       upload_status: "concluido"
     }).select("id, nome_arquivo, mime_type, tamanho_bytes, criado_em").single();
@@ -1788,8 +2387,11 @@ async function handleAnexarCurriculo(payload, token) {
         success: true,
         curriculo_id: novoCurriculo.id,
         nome_arquivo: novoCurriculo.nome_arquivo,
+        mime_type: novoCurriculo.mime_type,
         tamanho_bytes: novoCurriculo.tamanho_bytes,
-        mensagem: "Curr\xEDculo anexado e armazenado com sucesso no Google Drive corporativo.",
+        convertido_para_pdf: convertedPdfResult.converted,
+        formato_original: convertedPdfResult.originalFormat,
+        mensagem: convertedPdfResult.converted ? `Curr\xEDculo (${convertedPdfResult.originalFormat.toUpperCase()}) padronizado com sucesso para PDF institucional e armazenado no Google Drive.` : "Curr\xEDculo anexado e armazenado com sucesso no Google Drive corporativo.",
         url_visualizacao: `/api/curriculos/visualizar?id=${novoCurriculo.id}`
       }
     };
@@ -1797,6 +2399,7 @@ async function handleAnexarCurriculo(payload, token) {
     return { statusCode: 500, data: { success: false, error: err.message || "Erro interno" } };
   }
 }
+var handleImportarCurriculoDrive = handleAnexarCurriculo;
 async function handleConsultarCurriculos(candidatoId, tokenOrCurriculoId, maybeToken) {
   let curriculoId;
   let token;
@@ -2012,7 +2615,7 @@ async function vercelAdminCandidatosHandler(req, res) {
         const result2 = await handleVerificarDuplicidade(body, token);
         return res.status(result2.statusCode).json(result2.data);
       }
-      if (acao === "anexar_curriculo" || acao === "curriculo") {
+      if (acao === "anexar_curriculo" || acao === "curriculo" || acao === "importar_curriculo_drive") {
         const result2 = await handleAnexarCurriculo(body, token);
         return res.status(result2.statusCode).json(result2.data);
       }
@@ -2042,6 +2645,7 @@ export {
   handleConsultarCurriculos,
   handleCriarCandidato,
   handleEditarCandidato,
+  handleImportarCurriculoDrive,
   handleListarCandidatos,
   handleVerificarDuplicidade,
   handleVincularCandidatoLoja,

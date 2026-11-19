@@ -16,7 +16,11 @@ import {
 export const ALLOWED_CURRICULO_MIMES = [
   'application/pdf',
   'application/msword',
-  'application/vnd.openxmlformats-officedocument.wordprocessingml.document'
+  'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+  'application/rtf',
+  'text/rtf',
+  'image/jpeg',
+  'image/png'
 ] as const;
 
 export const FOLDER_NAME_CORPORATIVO = '01 - CORPORATIVO';

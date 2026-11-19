@@ -342,7 +342,11 @@ var googleOAuthService = new GoogleOAuthService();
 var ALLOWED_CURRICULO_MIMES = [
   "application/pdf",
   "application/msword",
-  "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+  "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+  "application/rtf",
+  "text/rtf",
+  "image/jpeg",
+  "image/png"
 ];
 var FOLDER_NAME_CORPORATIVO = "01 - CORPORATIVO";
 var FOLDER_NAME_UNIDADES = "02 - UNIDADES FRANQUEADAS";

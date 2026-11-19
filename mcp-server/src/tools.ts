@@ -394,12 +394,12 @@ export function registerGiganteTools(server: McpServer, config: ToolsConfig): vo
   // ─── 13. anexar_curriculo ───────────────────────────────────────────────────
   server.tool(
     'anexar_curriculo',
-    'Faz o upload do arquivo binário de currículo do candidato para armazenamento seguro no Google Drive institucional e vincula ao registro de candidato_curriculos. Aceita arquivos em Base64 (PDF, DOC ou DOCX). Resolve automaticamente a pasta da unidade e a subpasta por cargo.',
+    'Faz o upload do arquivo binário de currículo do candidato para armazenamento seguro no Google Drive institucional e vincula ao registro de candidato_curriculos. Aceita arquivos em Base64 nos formatos PDF, DOC, DOCX, RTF, JPG, JPEG e PNG (com padronização automática para PDF institucional). Resolve automaticamente a pasta da unidade e a subpasta por cargo.',
     {
       candidatoId: z.string().describe('ID (UUID) do candidato ao qual o currículo pertence.'),
       arquivoBase64: z.string().describe('Conteúdo completo do arquivo codificado em Base64.'),
-      nomeArquivo: z.string().describe('Nome original do arquivo com extensão (ex: "curriculo_candidato.pdf").'),
-      tipoMime: z.string().optional().describe('Tipo MIME do arquivo (ex: "application/pdf"). Se omitido, será inferido do arquivo.'),
+      nomeArquivo: z.string().describe('Nome original do arquivo com extensão (ex: "curriculo_candidato.pdf", "curriculo.docx", "documento.rtf", "foto.jpg").'),
+      tipoMime: z.string().optional().describe('Tipo MIME do arquivo (ex: "application/pdf", "image/jpeg", "application/rtf"). Se omitido, será inferido do arquivo por magic bytes.'),
       lojaId: z.string().optional().describe('UUID da unidade/loja para direcionamento da pasta no Google Drive. Se omitido, será resolvido automaticamente das candidaturas do candidato.'),
       cargo: z.string().optional().describe('Cargo pretendido (ex: "Mecânico", "Consultor de Vendas") para direcionamento da subpasta no Google Drive. Se omitido, será resolvido automaticamente das candidaturas do candidato.')
     },
@@ -417,7 +417,33 @@ export function registerGiganteTools(server: McpServer, config: ToolsConfig): vo
     }
   );
 
-  // ─── 14. consultar_curriculos ───────────────────────────────────────────────
+  // ─── 14. importar_curriculo_drive ───────────────────────────────────────────
+  server.tool(
+    'importar_curriculo_drive',
+    'Importa o arquivo de currículo do candidato a partir do Google Drive institucional ou de origem (formatos suportados: PDF, DOC, DOCX, RTF, JPG, JPEG e PNG). Padroniza automaticamente o arquivo em documento PDF para visualização no painel RH e armazena na hierarquia oficial da franqueadora (02 - UNIDADES FRANQUEADAS / Nome da Unidade / Cargo / Curriculo.pdf). Preserva o arquivo original no Drive de origem, valida integridade/duplicidade por hash MD5 e vincula o currículo ao candidato.',
+    {
+      candidatoId: z.string().describe('ID (UUID) do candidato ao qual o currículo pertence.'),
+      arquivoBase64: z.string().describe('Conteúdo completo do arquivo codificado em Base64.'),
+      nomeArquivo: z.string().describe('Nome original do arquivo com extensão (ex: "curriculo.docx", "documento.rtf", "curriculo.pdf", "foto_curriculo.jpg").'),
+      tipoMime: z.string().optional().describe('Tipo MIME do arquivo (ex: "application/pdf", "image/jpeg", "application/rtf"). Se omitido, será inferido do arquivo por magic bytes.'),
+      lojaId: z.string().optional().describe('UUID da unidade/loja para direcionamento da pasta no Google Drive. Se omitido, será resolvido automaticamente das candidaturas do candidato.'),
+      cargo: z.string().optional().describe('Cargo pretendido (ex: "Mecânico", "Consultor de Vendas", "Alinhador") para direcionamento da subpasta no Google Drive. Se omitido, será resolvido automaticamente das candidaturas do candidato.')
+    },
+    async (params) => {
+      const result = await apiRequest(config, 'POST', '/api/admin/candidatos', {
+        acao: 'importar_curriculo_drive',
+        candidatoId: params.candidatoId,
+        arquivoBase64: params.arquivoBase64,
+        nomeArquivo: params.nomeArquivo,
+        tipoMime: params.tipoMime,
+        lojaId: params.lojaId,
+        cargo: params.cargo
+      });
+      return formatResponse(result);
+    }
+  );
+
+  // ─── 15. consultar_curriculos ───────────────────────────────────────────────
   server.tool(
     'consultar_curriculos',
     'Lista todos os arquivos de currículo anexados a um candidato, retornando metadados técnicos (data, tamanho, MD5, status no Drive) e link seguro para visualização institucional.',
@@ -433,7 +459,7 @@ export function registerGiganteTools(server: McpServer, config: ToolsConfig): vo
     }
   );
 
-  // ─── 15. vincular_candidato_loja ────────────────────────────────────────────
+  // ─── 16. vincular_candidato_loja ────────────────────────────────────────────
   server.tool(
     'vincular_candidato_loja',
     'Vincula formalmente um candidato a uma loja (unidade) no Banco de Talentos, permitindo que a equipe de RH e gerentes daquela unidade visualizem o candidato imediatamente em seu painel. O vínculo é estritamente no Banco de Talentos: NÃO conta como candidatura a vaga aberta específica nem altera contadores de vagas abertas, e NÃO dispara mensagens automáticas (WhatsApp, SMS ou e-mail) ao candidato.',

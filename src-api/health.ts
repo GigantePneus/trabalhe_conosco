@@ -8,7 +8,7 @@ export default async function healthHandler(req: any, res: any) {
     status: 'ok',
     service: 'gigante-pneus-mcp-remote',
     protocol: 'streamable-http',
-    version: '1.3.0',
+    version: '1.4.0',
     timestamp: new Date().toISOString()
   }));
 }

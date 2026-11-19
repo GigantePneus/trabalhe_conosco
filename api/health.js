@@ -9,7 +9,7 @@ async function healthHandler(req, res) {
     status: "ok",
     service: "gigante-pneus-mcp-remote",
     protocol: "streamable-http",
-    version: "1.3.0",
+    version: "1.4.0",
     timestamp: (/* @__PURE__ */ new Date()).toISOString()
   }));
 }

@@ -15,15 +15,19 @@ function validateCurriculoFile(buffer, originalName, declaredMimeType) {
     };
   }
   const ext = originalName.includes(".") ? originalName.split(".").pop()?.toLowerCase() || "" : "";
-  if (!["pdf", "doc", "docx"].includes(ext)) {
+  const allowedExtensions = ["pdf", "doc", "docx", "rtf", "jpg", "jpeg", "png"];
+  if (!allowedExtensions.includes(ext)) {
     return {
       valid: false,
-      error: "EXTENSAO_NAO_PERMITIDA: Apenas arquivos .pdf, .doc e .docx s\xE3o aceitos."
+      error: "EXTENSAO_NAO_PERMITIDA: Apenas arquivos .pdf, .doc, .docx, .rtf, .jpg, .jpeg e .png s\xE3o aceitos."
     };
   }
   const isPdf = buffer.length >= 5 && buffer[0] === 37 && buffer[1] === 80 && buffer[2] === 68 && buffer[3] === 70 && buffer[4] === 45;
   const isDoc = buffer.length >= 8 && buffer[0] === 208 && buffer[1] === 207 && buffer[2] === 17 && buffer[3] === 224 && buffer[4] === 161 && buffer[5] === 177 && buffer[6] === 26 && buffer[7] === 225;
-  const isDocx = buffer.length >= 4 && buffer[0] === 80 && buffer[1] === 75 && buffer[2] === 3 && buffer[3] === 4;
+  const isDocx = buffer.length >= 4 && buffer[0] === 80 && buffer[1] === 75 && (buffer[2] === 3 || buffer[2] === 5 || buffer[2] === 7) && (buffer[3] === 4 || buffer[3] === 6 || buffer[3] === 8);
+  const isRtf = buffer.length >= 5 && buffer[0] === 123 && buffer[1] === 92 && buffer[2] === 114 && buffer[3] === 116 && buffer[4] === 102;
+  const isJpeg = buffer.length >= 3 && buffer[0] === 255 && buffer[1] === 216 && buffer[2] === 255;
+  const isPng = buffer.length >= 8 && buffer[0] === 137 && buffer[1] === 80 && buffer[2] === 78 && buffer[3] === 71 && buffer[4] === 13 && buffer[5] === 10 && buffer[6] === 26 && buffer[7] === 10;
   if (ext === "pdf" && !isPdf) {
     return {
       valid: false,
@@ -42,10 +46,28 @@ function validateCurriculoFile(buffer, originalName, declaredMimeType) {
       error: "CONTEUDO_INVALIDO: O arquivo possui extens\xE3o .docx mas sua assinatura bin\xE1ria n\xE3o corresponde a um documento OOXML/Word v\xE1lido."
     };
   }
-  if (!isPdf && !isDoc && !isDocx) {
+  if (ext === "rtf" && !isRtf) {
     return {
       valid: false,
-      error: "CONTEUDO_REJEITADO: Formato bin\xE1rio n\xE3o reconhecido. Envie um arquivo PDF, DOC ou DOCX aut\xEAntico."
+      error: "CONTEUDO_INVALIDO: O arquivo possui extens\xE3o .rtf mas sua assinatura bin\xE1ria n\xE3o corresponde a um documento RTF v\xE1lido."
+    };
+  }
+  if ((ext === "jpg" || ext === "jpeg") && !isJpeg) {
+    return {
+      valid: false,
+      error: "CONTEUDO_INVALIDO: O arquivo possui extens\xE3o .jpg/.jpeg mas sua assinatura bin\xE1ria n\xE3o corresponde a uma imagem JPEG v\xE1lida."
+    };
+  }
+  if (ext === "png" && !isPng) {
+    return {
+      valid: false,
+      error: "CONTEUDO_INVALIDO: O arquivo possui extens\xE3o .png mas sua assinatura bin\xE1ria n\xE3o corresponde a uma imagem PNG v\xE1lida."
+    };
+  }
+  if (!isPdf && !isDoc && !isDocx && !isRtf && !isJpeg && !isPng) {
+    return {
+      valid: false,
+      error: "CONTEUDO_REJEITADO: Formato bin\xE1rio n\xE3o reconhecido. Envie um arquivo PDF, DOC, DOCX, RTF, JPG ou PNG aut\xEAntico."
     };
   }
   let finalMime = "application/pdf";
@@ -59,6 +81,15 @@ function validateCurriculoFile(buffer, originalName, declaredMimeType) {
   } else if (isDocx) {
     finalMime = "application/vnd.openxmlformats-officedocument.wordprocessingml.document";
     format = "docx";
+  } else if (isRtf) {
+    finalMime = "application/rtf";
+    format = "rtf";
+  } else if (isJpeg) {
+    finalMime = "image/jpeg";
+    format = ext === "jpg" ? "jpg" : "jpeg";
+  } else if (isPng) {
+    finalMime = "image/png";
+    format = "png";
   }
   return {
     valid: true,
@@ -488,7 +519,11 @@ var googleOAuthService = new GoogleOAuthService();
 var ALLOWED_CURRICULO_MIMES = [
   "application/pdf",
   "application/msword",
-  "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+  "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+  "application/rtf",
+  "text/rtf",
+  "image/jpeg",
+  "image/png"
 ];
 var FOLDER_NAME_CORPORATIVO = "01 - CORPORATIVO";
 var FOLDER_NAME_UNIDADES = "02 - UNIDADES FRANQUEADAS";

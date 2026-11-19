@@ -342,18 +342,42 @@ function registerGiganteTools(server, config) {
   );
   server.tool(
     "anexar_curriculo",
-    "Faz o upload do arquivo bin\xE1rio de curr\xEDculo do candidato para armazenamento seguro no Google Drive institucional e vincula ao registro de candidato_curriculos. Aceita arquivos em Base64 (PDF, DOC ou DOCX). Resolve automaticamente a pasta da unidade e a subpasta por cargo.",
+    "Faz o upload do arquivo bin\xE1rio de curr\xEDculo do candidato para armazenamento seguro no Google Drive institucional e vincula ao registro de candidato_curriculos. Aceita arquivos em Base64 nos formatos PDF, DOC, DOCX, RTF, JPG, JPEG e PNG (com padroniza\xE7\xE3o autom\xE1tica para PDF institucional). Resolve automaticamente a pasta da unidade e a subpasta por cargo.",
     {
       candidatoId: z.string().describe("ID (UUID) do candidato ao qual o curr\xEDculo pertence."),
       arquivoBase64: z.string().describe("Conte\xFAdo completo do arquivo codificado em Base64."),
-      nomeArquivo: z.string().describe('Nome original do arquivo com extens\xE3o (ex: "curriculo_candidato.pdf").'),
-      tipoMime: z.string().optional().describe('Tipo MIME do arquivo (ex: "application/pdf"). Se omitido, ser\xE1 inferido do arquivo.'),
+      nomeArquivo: z.string().describe('Nome original do arquivo com extens\xE3o (ex: "curriculo_candidato.pdf", "curriculo.docx", "documento.rtf", "foto.jpg").'),
+      tipoMime: z.string().optional().describe('Tipo MIME do arquivo (ex: "application/pdf", "image/jpeg", "application/rtf"). Se omitido, ser\xE1 inferido do arquivo por magic bytes.'),
       lojaId: z.string().optional().describe("UUID da unidade/loja para direcionamento da pasta no Google Drive. Se omitido, ser\xE1 resolvido automaticamente das candidaturas do candidato."),
       cargo: z.string().optional().describe('Cargo pretendido (ex: "Mec\xE2nico", "Consultor de Vendas") para direcionamento da subpasta no Google Drive. Se omitido, ser\xE1 resolvido automaticamente das candidaturas do candidato.')
     },
     async (params) => {
       const result = await apiRequest(config, "POST", "/api/admin/candidatos", {
         acao: "anexar_curriculo",
+        candidatoId: params.candidatoId,
+        arquivoBase64: params.arquivoBase64,
+        nomeArquivo: params.nomeArquivo,
+        tipoMime: params.tipoMime,
+        lojaId: params.lojaId,
+        cargo: params.cargo
+      });
+      return formatResponse(result);
+    }
+  );
+  server.tool(
+    "importar_curriculo_drive",
+    "Importa o arquivo de curr\xEDculo do candidato a partir do Google Drive institucional ou de origem (formatos suportados: PDF, DOC, DOCX, RTF, JPG, JPEG e PNG). Padroniza automaticamente o arquivo em documento PDF para visualiza\xE7\xE3o no painel RH e armazena na hierarquia oficial da franqueadora (02 - UNIDADES FRANQUEADAS / Nome da Unidade / Cargo / Curriculo.pdf). Preserva o arquivo original no Drive de origem, valida integridade/duplicidade por hash MD5 e vincula o curr\xEDculo ao candidato.",
+    {
+      candidatoId: z.string().describe("ID (UUID) do candidato ao qual o curr\xEDculo pertence."),
+      arquivoBase64: z.string().describe("Conte\xFAdo completo do arquivo codificado em Base64."),
+      nomeArquivo: z.string().describe('Nome original do arquivo com extens\xE3o (ex: "curriculo.docx", "documento.rtf", "curriculo.pdf", "foto_curriculo.jpg").'),
+      tipoMime: z.string().optional().describe('Tipo MIME do arquivo (ex: "application/pdf", "image/jpeg", "application/rtf"). Se omitido, ser\xE1 inferido do arquivo por magic bytes.'),
+      lojaId: z.string().optional().describe("UUID da unidade/loja para direcionamento da pasta no Google Drive. Se omitido, ser\xE1 resolvido automaticamente das candidaturas do candidato."),
+      cargo: z.string().optional().describe('Cargo pretendido (ex: "Mec\xE2nico", "Consultor de Vendas", "Alinhador") para direcionamento da subpasta no Google Drive. Se omitido, ser\xE1 resolvido automaticamente das candidaturas do candidato.')
+    },
+    async (params) => {
+      const result = await apiRequest(config, "POST", "/api/admin/candidatos", {
+        acao: "importar_curriculo_drive",
         candidatoId: params.candidatoId,
         arquivoBase64: params.arquivoBase64,
         nomeArquivo: params.nomeArquivo,
@@ -550,7 +574,7 @@ async function mcpServerlessHandler(req, res) {
       status: "ok",
       service: "gigante-pneus-mcp-remote",
       protocol: "streamable-http",
-      version: "1.3.0",
+      version: "1.4.0",
       timestamp: (/* @__PURE__ */ new Date()).toISOString()
     }));
     return;
@@ -592,7 +616,7 @@ async function mcpServerlessHandler(req, res) {
   const backendToken = operatorContext.supabaseSessionToken || incomingToken;
   const server = new McpServer({
     name: "gigante-pneus-trabalhe-conosco-remoto",
-    version: "1.3.0",
+    version: "1.4.0",
     description: "Servidor MCP Administrativo \u2014 Gest\xE3o de vagas, candidatos e curr\xEDculos Gigante Pneus"
   });
   registerGiganteTools(server, {

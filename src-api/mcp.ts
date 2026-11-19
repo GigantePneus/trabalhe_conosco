@@ -25,7 +25,7 @@ export default async function mcpServerlessHandler(req: any, res: any) {
       status: 'ok',
       service: 'gigante-pneus-mcp-remote',
       protocol: 'streamable-http',
-      version: '1.3.0',
+      version: '1.4.0',
       timestamp: new Date().toISOString()
     }));
     return;
@@ -75,7 +75,7 @@ export default async function mcpServerlessHandler(req: any, res: any) {
 
   const server = new McpServer({
     name: 'gigante-pneus-trabalhe-conosco-remoto',
-    version: '1.3.0',
+    version: '1.4.0',
     description: 'Servidor MCP Administrativo — Gestão de vagas, candidatos e currículos Gigante Pneus'
   });
 
