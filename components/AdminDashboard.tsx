@@ -140,6 +140,98 @@ const AdminDashboard: React.FC = () => {
 
   const [selectedResume, setSelectedResume] = useState<Candidato | null>(null);
 
+  // Controle de Rolagem Horizontal Sincronizada e Fixa da Tabela do Banco de Talentos
+  const tableContainerRef = React.useRef<HTMLDivElement>(null);
+  const stickyTrackRef = React.useRef<HTMLDivElement>(null);
+  const isSyncingScrollRef = React.useRef(false);
+
+  const [canScrollHorizontally, setCanScrollHorizontally] = useState(false);
+  const [scrollProgress, setScrollProgress] = useState(0);
+  const [isAtLeft, setIsAtLeft] = useState(true);
+  const [isAtRight, setIsAtRight] = useState(false);
+  const [tableScrollWidth, setTableScrollWidth] = useState(0);
+
+  const updateTableScrollMetrics = useCallback(() => {
+    const container = tableContainerRef.current;
+    if (!container) return;
+    const { scrollWidth, clientWidth, scrollLeft } = container;
+    const maxScroll = Math.max(0, scrollWidth - clientWidth);
+    const canScroll = maxScroll > 4;
+
+    setCanScrollHorizontally(canScroll);
+    setTableScrollWidth(scrollWidth);
+    setIsAtLeft(scrollLeft <= 4);
+    setIsAtRight(scrollLeft >= maxScroll - 4);
+    setScrollProgress(maxScroll > 0 ? (scrollLeft / maxScroll) * 100 : 0);
+  }, []);
+
+  const handleTableScroll = useCallback(() => {
+    const container = tableContainerRef.current;
+    if (!container) return;
+
+    if (!isSyncingScrollRef.current && stickyTrackRef.current) {
+      isSyncingScrollRef.current = true;
+      stickyTrackRef.current.scrollLeft = container.scrollLeft;
+      isSyncingScrollRef.current = false;
+    }
+
+    const { scrollWidth, clientWidth, scrollLeft } = container;
+    const maxScroll = Math.max(0, scrollWidth - clientWidth);
+    setIsAtLeft(scrollLeft <= 4);
+    setIsAtRight(scrollLeft >= maxScroll - 4);
+    setScrollProgress(maxScroll > 0 ? (scrollLeft / maxScroll) * 100 : 0);
+  }, []);
+
+  const handleStickyScroll = useCallback(() => {
+    const track = stickyTrackRef.current;
+    if (!track) return;
+
+    if (!isSyncingScrollRef.current && tableContainerRef.current) {
+      isSyncingScrollRef.current = true;
+      tableContainerRef.current.scrollLeft = track.scrollLeft;
+      isSyncingScrollRef.current = false;
+    }
+
+    const container = tableContainerRef.current;
+    if (container) {
+      const { scrollWidth, clientWidth, scrollLeft } = container;
+      const maxScroll = Math.max(0, scrollWidth - clientWidth);
+      setIsAtLeft(scrollLeft <= 4);
+      setIsAtRight(scrollLeft >= maxScroll - 4);
+      setScrollProgress(maxScroll > 0 ? (scrollLeft / maxScroll) * 100 : 0);
+    }
+  }, []);
+
+  const scrollByAmount = useCallback((delta: number) => {
+    if (tableContainerRef.current) {
+      tableContainerRef.current.scrollBy({ left: delta, behavior: 'smooth' });
+    }
+  }, []);
+
+  useEffect(() => {
+    if (activeTab !== 'talents') return;
+    updateTableScrollMetrics();
+
+    const container = tableContainerRef.current;
+    if (!container) return;
+
+    const resizeObserver = new ResizeObserver(() => {
+      updateTableScrollMetrics();
+    });
+    resizeObserver.observe(container);
+
+    const table = container.querySelector('table');
+    if (table) {
+      resizeObserver.observe(table);
+    }
+
+    window.addEventListener('resize', updateTableScrollMetrics);
+    return () => {
+      resizeObserver.disconnect();
+      window.removeEventListener('resize', updateTableScrollMetrics);
+    };
+  }, [activeTab, filteredCandidatos.length, updateTableScrollMetrics]);
+
   const [stats, setStats] = useState<KPIStats>({ total: 0, porCidade: {}, porCargo: {}, porDia: {} });
   
   // Dados extras para os novos gráficos
@@ -1869,11 +1961,15 @@ const AdminDashboard: React.FC = () => {
                 </div>
               </div>
 
-              {/* Visualização em Tabela para Desktop (lg:) com rolagem horizontal contida */}
-              <div className="hidden lg:block bg-white dark:bg-gray-900 rounded-2xl lg:rounded-[2.5rem] shadow-xl border border-gray-100 dark:border-gray-800 overflow-hidden">
-                <div className="overflow-x-auto custom-scrollbar">
-                  <table className="w-full text-left min-w-[960px]">
-                    <thead className="bg-gray-50/50 dark:bg-gray-800/50 border-b dark:border-gray-700">
+              {/* Visualização em Tabela para Desktop (lg:) com rolagem horizontal contida e cabeçalho/ação fixos */}
+              <div className="hidden lg:flex flex-col bg-white dark:bg-gray-900 rounded-2xl lg:rounded-[2.5rem] shadow-xl border border-gray-100 dark:border-gray-800 overflow-hidden relative">
+                <div 
+                  ref={tableContainerRef}
+                  onScroll={handleTableScroll}
+                  className="overflow-x-auto overflow-y-auto max-h-[calc(100vh-270px)] min-h-[420px] custom-scrollbar no-scrollbar-x"
+                >
+                  <table className="w-full text-left min-w-[1020px] border-collapse">
+                    <thead className="sticky top-0 z-20 bg-gray-50/95 dark:bg-gray-800/95 backdrop-blur-md border-b dark:border-gray-700 shadow-sm">
                       <tr>
                         <th className="px-5 py-4 text-[10px] font-black text-gray-400 dark:text-gray-500 uppercase tracking-widest min-w-[190px]">Candidato</th>
                         <th className="px-5 py-4 text-[10px] font-black text-gray-400 dark:text-gray-500 uppercase tracking-widest min-w-[170px]">Contato</th>
@@ -1881,7 +1977,9 @@ const AdminDashboard: React.FC = () => {
                         <th className="px-5 py-4 text-[10px] font-black text-gray-400 dark:text-gray-500 uppercase tracking-widest min-w-[180px]">Unidade Pretendida</th>
                         <th className="px-5 py-4 text-[10px] font-black text-gray-400 dark:text-gray-500 uppercase tracking-widest min-w-[140px]">Tipo de Cadastro</th>
                         <th className="px-5 py-4 text-[10px] font-black text-gray-400 dark:text-gray-500 uppercase tracking-widest min-w-[100px]">Cadastro</th>
-                        <th className="px-5 py-4 text-[10px] font-black text-gray-400 dark:text-gray-500 uppercase tracking-widest text-right w-16">Ação</th>
+                        <th className="sticky right-0 top-0 z-30 px-5 py-4 text-[10px] font-black text-gray-400 dark:text-gray-500 uppercase tracking-widest text-right w-20 bg-gray-50/95 dark:bg-gray-800/95 backdrop-blur-md border-l border-gray-200/80 dark:border-gray-700 shadow-[-6px_0_10px_-2px_rgba(0,0,0,0.06)]">
+                          Ação
+                        </th>
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-gray-50 dark:divide-gray-800">
@@ -1954,10 +2052,11 @@ const AdminDashboard: React.FC = () => {
                           <td className="px-5 py-4 text-[11px] font-bold text-gray-400 uppercase whitespace-nowrap">
                             {new Date(item.created_at).toLocaleDateString('pt-BR')}
                           </td>
-                          <td className="px-5 py-4 text-right whitespace-nowrap">
+                          {/* Coluna AÇÃO FIXA À DIREITA */}
+                          <td className="sticky right-0 z-10 px-5 py-4 text-right whitespace-nowrap bg-white dark:bg-gray-900 group-hover:bg-red-50 dark:group-hover:bg-gray-800/90 transition-colors border-l border-gray-100 dark:border-gray-800 shadow-[-6px_0_10px_-2px_rgba(0,0,0,0.04)]">
                             <button 
                               onClick={() => setSelectedResume(item)} 
-                              className="bg-red-600 text-white p-2.5 rounded-xl hover:bg-red-700 transition-all shadow-md active:scale-90"
+                              className="bg-red-600 text-white p-2.5 rounded-xl hover:bg-red-700 transition-all shadow-md active:scale-90 inline-flex items-center justify-center"
                               title="Ver Dossiê Profissional Completo"
                             >
                               <Eye className="h-4 w-4" />
@@ -1968,6 +2067,49 @@ const AdminDashboard: React.FC = () => {
                     </tbody>
                   </table>
                 </div>
+
+                {/* Barra de Rolagem Horizontal Fixa e Sincronizada (Sempre Acessível na Parte Inferior) */}
+                {canScrollHorizontally && (
+                  <div className="sticky bottom-0 z-30 bg-white/95 dark:bg-gray-900/95 backdrop-blur-md border-t border-gray-100 dark:border-gray-800 px-4 py-2 flex items-center justify-between gap-3 select-none transition-all shadow-[0_-4px_12px_rgba(0,0,0,0.04)]">
+                    <div className="flex items-center gap-1.5 shrink-0">
+                      <button
+                        type="button"
+                        onClick={() => scrollByAmount(-250)}
+                        disabled={isAtLeft}
+                        className="p-1.5 rounded-lg bg-gray-100 dark:bg-gray-800 hover:bg-gray-200 dark:hover:bg-gray-700 text-gray-700 dark:text-gray-300 disabled:opacity-30 disabled:cursor-not-allowed transition-all"
+                        title="Rolar colunas para a esquerda"
+                      >
+                        <ChevronLeft className="h-3.5 w-3.5" />
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => scrollByAmount(250)}
+                        disabled={isAtRight}
+                        className="p-1.5 rounded-lg bg-gray-100 dark:bg-gray-800 hover:bg-gray-200 dark:hover:bg-gray-700 text-gray-700 dark:text-gray-300 disabled:opacity-30 disabled:cursor-not-allowed transition-all"
+                        title="Rolar colunas para a direita"
+                      >
+                        <ChevronRight className="h-3.5 w-3.5" />
+                      </button>
+                      <span className="hidden sm:inline-flex items-center gap-1 text-[10px] uppercase font-black tracking-wider text-gray-400 pl-1">
+                        Navegação de Colunas
+                      </span>
+                    </div>
+
+                    {/* Trilho Sincronizado com o scroll real da tabela */}
+                    <div
+                      ref={stickyTrackRef}
+                      onScroll={handleStickyScroll}
+                      className="flex-1 overflow-x-auto custom-scrollbar h-3 cursor-pointer bg-gray-100 dark:bg-gray-800/80 rounded-full"
+                      title="Arraste para rolar as colunas da tabela"
+                    >
+                      <div style={{ width: `${tableScrollWidth}px`, height: '1px' }} />
+                    </div>
+
+                    <div className="text-[10px] font-bold text-gray-400 shrink-0 tabular-nums">
+                      {Math.round(scrollProgress)}%
+                    </div>
+                  </div>
+                )}
               </div>
 
               {/* Visualização em Cartões Responsivos (Mobile e Tablets < lg) */}

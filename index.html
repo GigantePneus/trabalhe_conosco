@@ -60,6 +60,32 @@
     </script>
     <style>
         body { font-family: 'Inter', sans-serif; transition: background-color 0.3s ease; }
+        
+        /* Oculta scrollbar horizontal do container interno mantendo a rolagem ativa para evitar barras duplicadas */
+        .no-scrollbar-x::-webkit-scrollbar:horizontal {
+            display: none !important;
+            height: 0 !important;
+        }
+        .no-scrollbar-x {
+            -ms-overflow-style: -ms-autohiding-scrollbar;
+        }
+
+        /* Scrollbar elegante Gigante Pneus */
+        .custom-scrollbar::-webkit-scrollbar {
+            width: 6px;
+            height: 6px;
+        }
+        .custom-scrollbar::-webkit-scrollbar-track {
+            background: rgba(0, 0, 0, 0.04);
+            border-radius: 9999px;
+        }
+        .custom-scrollbar::-webkit-scrollbar-thumb {
+            background: rgba(156, 163, 175, 0.5);
+            border-radius: 9999px;
+        }
+        .custom-scrollbar::-webkit-scrollbar-thumb:hover {
+            background: rgba(220, 38, 38, 0.7);
+        }
     </style>
 <script type="importmap">
 {
