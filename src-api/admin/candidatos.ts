@@ -25,6 +25,7 @@ import { validateCurriculoFile } from '../../services/security/fileValidator';
 import { validateCpf, maskCpf, generateCpfHash, encryptCpf } from '../../services/security/cpfSecurity';
 import { googleDriveStorage } from '../../services/storage/googleDriveStorage';
 import { convertCurriculoToPdf } from '../../services/storage/curriculoPdfConverter';
+import { toCanonicalCargo } from '../../services/cargoEquivalenceService';
 
 let supabaseAdminInstance: SupabaseClient | null = null;
 
@@ -1212,7 +1213,8 @@ export async function handleVincularCandidatoLoja(
     if (!loja) return { statusCode: 404, data: { success: false, error: 'Unidade (loja) não localizada.' } };
     if (!loja.ativa) return { statusCode: 400, data: { success: false, error: 'Unidade temporariamente desativada.' } };
 
-    const cargoPretendido = (payload.cargoPretendido || 'Banco de Talentos').trim();
+    const rawPretendido = (payload.cargoPretendido || 'Banco de Talentos').trim();
+    const cargoPretendido = toCanonicalCargo(rawPretendido);
 
     // 2. Busca último currículo do candidato para associar
     const { data: ultCurr } = await adminClient

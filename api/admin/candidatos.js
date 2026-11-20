@@ -548,6 +548,9 @@ function normalizeCargoSubfolderName(rawTitle) {
   if (/recep|atendent/i.test(lower)) {
     return "Recepcionista";
   }
+  if (/borrach/i.test(lower)) {
+    return "Borracheiro";
+  }
   return clean.replace(/[/\\?%*:|"<>]/g, " - ").replace(/\s+/g, " ").trim();
 }
 var GoogleDriveOAuthAdapter = class {
@@ -1357,43 +1360,74 @@ ${startXref}
 function extractTextFromDocx(buffer) {
   const paragraphs = [];
   try {
-    let offset = 0;
-    while (offset < buffer.length - 30) {
-      if (buffer[offset] === 80 && buffer[offset + 1] === 75 && buffer[offset + 2] === 3 && buffer[offset + 3] === 4) {
-        const compression = buffer.readUInt16LE(offset + 8);
-        const compressedSize = buffer.readUInt32LE(offset + 18);
-        const fileNameLength = buffer.readUInt16LE(offset + 26);
-        const extraFieldLength = buffer.readUInt16LE(offset + 28);
-        const fileName = buffer.toString("utf8", offset + 30, offset + 30 + fileNameLength);
-        const dataOffset = offset + 30 + fileNameLength + extraFieldLength;
+    let xmlContent = "";
+    let cdOffset = 0;
+    while (cdOffset < buffer.length - 46) {
+      if (buffer[cdOffset] === 80 && buffer[cdOffset + 1] === 75 && buffer[cdOffset + 2] === 1 && buffer[cdOffset + 3] === 2) {
+        const compression = buffer.readUInt16LE(cdOffset + 10);
+        const compressedSize = buffer.readUInt32LE(cdOffset + 20);
+        const fileNameLength = buffer.readUInt16LE(cdOffset + 28);
+        const extraFieldLength = buffer.readUInt16LE(cdOffset + 30);
+        const fileCommentLength = buffer.readUInt16LE(cdOffset + 32);
+        const localHeaderOffset = buffer.readUInt32LE(cdOffset + 42);
+        const fileName = buffer.toString("utf8", cdOffset + 46, cdOffset + 46 + fileNameLength);
         if (fileName === "word/document.xml") {
+          const localFileNameLength = buffer.readUInt16LE(localHeaderOffset + 26);
+          const localExtraFieldLength = buffer.readUInt16LE(localHeaderOffset + 28);
+          const dataOffset = localHeaderOffset + 30 + localFileNameLength + localExtraFieldLength;
           const compressedData = buffer.subarray(dataOffset, dataOffset + compressedSize);
-          let xmlContent = "";
           if (compression === 8) {
             xmlContent = zlib.inflateRawSync(compressedData).toString("utf8");
           } else if (compression === 0) {
             xmlContent = compressedData.toString("utf8");
           }
-          const pRegex = /<w:p\b[^>]*>(.*?)<\/w:p>/gs;
-          let match;
-          while ((match = pRegex.exec(xmlContent)) !== null) {
-            const pContent = match[1];
-            const tRegex = /<w:t\b[^>]*>(.*?)<\/w:t>/gs;
-            let tMatch;
-            let pText = "";
-            while ((tMatch = tRegex.exec(pContent)) !== null) {
-              pText += tMatch[1];
-            }
-            if (pText.trim()) {
-              const decoded = pText.replace(/&amp;/g, "&").replace(/&lt;/g, "<").replace(/&gt;/g, ">").replace(/&quot;/g, '"').replace(/&apos;/g, "'");
-              paragraphs.push(decoded.trim());
-            }
-          }
           break;
         }
-        offset = dataOffset + compressedSize;
+        cdOffset += 46 + fileNameLength + extraFieldLength + fileCommentLength;
       } else {
-        offset++;
+        cdOffset++;
+      }
+    }
+    if (!xmlContent) {
+      let offset = 0;
+      while (offset < buffer.length - 30) {
+        if (buffer[offset] === 80 && buffer[offset + 1] === 75 && buffer[offset + 2] === 3 && buffer[offset + 3] === 4) {
+          const compression = buffer.readUInt16LE(offset + 8);
+          const compressedSize = buffer.readUInt32LE(offset + 18);
+          const fileNameLength = buffer.readUInt16LE(offset + 26);
+          const extraFieldLength = buffer.readUInt16LE(offset + 28);
+          const fileName = buffer.toString("utf8", offset + 30, offset + 30 + fileNameLength);
+          const dataOffset = offset + 30 + fileNameLength + extraFieldLength;
+          if (fileName === "word/document.xml" && compressedSize > 0) {
+            const compressedData = buffer.subarray(dataOffset, dataOffset + compressedSize);
+            if (compression === 8) {
+              xmlContent = zlib.inflateRawSync(compressedData).toString("utf8");
+            } else if (compression === 0) {
+              xmlContent = compressedData.toString("utf8");
+            }
+            break;
+          }
+          offset = compressedSize > 0 ? dataOffset + compressedSize : offset + 1;
+        } else {
+          offset++;
+        }
+      }
+    }
+    if (xmlContent) {
+      const pRegex = /<w:p\b[^>]*>(.*?)<\/w:p>/gs;
+      let match;
+      while ((match = pRegex.exec(xmlContent)) !== null) {
+        const pContent = match[1];
+        const tRegex = /<w:t\b[^>]*>(.*?)<\/w:t>/gs;
+        let tMatch;
+        let pText = "";
+        while ((tMatch = tRegex.exec(pContent)) !== null) {
+          pText += tMatch[1];
+        }
+        if (pText.trim()) {
+          const decoded = pText.replace(/&amp;/g, "&").replace(/&lt;/g, "<").replace(/&gt;/g, ">").replace(/&quot;/g, '"').replace(/&apos;/g, "'");
+          paragraphs.push(decoded.trim());
+        }
       }
     }
   } catch (err) {
@@ -1692,6 +1726,86 @@ async function convertCurriculoToPdf(options) {
     }
   }
   throw new Error(`FORMATO_NAO_SUPORTADO: O formato '${format}' n\xE3o possui conversor para PDF implementado.`);
+}
+
+// services/cargoEquivalenceService.ts
+var CANONICAL_CARGOS = [
+  {
+    titulo: "Alinhador Automotivo",
+    driveFolder: "Alinhador",
+    sinonimos: ["alinhador", "alinhador automotivo", "alinhamento", "alinhador de direcao", "alinhador de veiculos"]
+  },
+  {
+    titulo: "Auxiliar de P\xE1tio / Auxiliar de Mec\xE2nico",
+    driveFolder: "Auxiliar de P\xE1tio",
+    sinonimos: [
+      "auxiliar de patio",
+      "auxiliar de patio / auxiliar de mecanico",
+      "aux patio",
+      "auxiliar de mecanico",
+      "auxiliar mecanico",
+      "auxiliar de servicos gerais",
+      "auxiliar geral",
+      "ajudante geral",
+      "ajudante de mecanico",
+      "ajudante de patio",
+      "auxiliar de patio-marisa da silva"
+    ]
+  },
+  {
+    titulo: "Borracheiro",
+    driveFolder: "Borracheiro",
+    sinonimos: ["borracheiro", "borracharia", "reparador de pneus", "auxiliar de borracharia"]
+  },
+  {
+    titulo: "Consultor de Vendas",
+    driveFolder: "Consultor de Vendas",
+    sinonimos: ["consultor de vendas", "consultora de vendas", "vendas", "vendedor", "vendedora", "consultor comercial", "balconista"]
+  },
+  {
+    titulo: "Estoquista",
+    driveFolder: "Estoquista",
+    sinonimos: ["estoquista", "estoque", "auxiliar de estoque", "almoxarife", "conferente"]
+  },
+  {
+    titulo: "Mec\xE2nico Automotivo",
+    driveFolder: "Mec\xE2nico",
+    sinonimos: ["mecanico", "mecanico automotivo", "mecanica", "mecanico de autos", "mecanico geral", "tecnico de mecanica"]
+  },
+  {
+    titulo: "Recepcionista de Centro Automotivo",
+    driveFolder: "Recepcionista",
+    sinonimos: ["recepcionista", "recepcionista de centro automotivo", "recepcao", "atendente", "atendimento ao cliente"]
+  }
+];
+function normalizeCargoText(text) {
+  if (!text) return "";
+  return text.trim().toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/\s+/g, " ");
+}
+function toCanonicalCargo(rawText) {
+  if (!rawText || typeof rawText !== "string") return "Banco de Talentos Geral";
+  const norm = normalizeCargoText(rawText);
+  if (!norm || norm === "geral" || norm === "banco de talentos" || norm.includes("espontanea")) {
+    return "Candidatura Espont\xE2nea / Banco de Talentos";
+  }
+  for (const def of CANONICAL_CARGOS) {
+    const normTitulo = normalizeCargoText(def.titulo);
+    if (norm === normTitulo) return def.titulo;
+    for (const sin of def.sinonimos) {
+      if (norm === normalizeCargoText(sin)) return def.titulo;
+    }
+  }
+  if (norm.includes("borrach")) return "Borracheiro";
+  if (norm.includes("alinhad")) return "Alinhador Automotivo";
+  if (norm.includes("estoqu") || norm.includes("almoxar")) return "Estoquista";
+  if (norm.includes("recep") || norm.includes("atendent")) return "Recepcionista de Centro Automotivo";
+  if (norm.includes("vend") || norm.includes("comercial")) return "Consultor de Vendas";
+  if (norm.includes("patio") || norm.includes("auxiliar")) {
+    if (norm.includes("mecanic")) return "Auxiliar de P\xE1tio / Auxiliar de Mec\xE2nico";
+    return "Auxiliar de P\xE1tio / Auxiliar de Mec\xE2nico";
+  }
+  if (norm.includes("mecanic")) return "Mec\xE2nico Automotivo";
+  return rawText.trim();
 }
 
 // src-api/admin/candidatos.ts
@@ -2481,7 +2595,8 @@ async function handleVincularCandidatoLoja(payload, token) {
     if (!cand) return { statusCode: 404, data: { success: false, error: "Candidato n\xE3o localizado." } };
     if (!loja) return { statusCode: 404, data: { success: false, error: "Unidade (loja) n\xE3o localizada." } };
     if (!loja.ativa) return { statusCode: 400, data: { success: false, error: "Unidade temporariamente desativada." } };
-    const cargoPretendido = (payload.cargoPretendido || "Banco de Talentos").trim();
+    const rawPretendido = (payload.cargoPretendido || "Banco de Talentos").trim();
+    const cargoPretendido = toCanonicalCargo(rawPretendido);
     const { data: ultCurr } = await adminClient.from("candidato_curriculos").select("id").eq("candidato_id", cand.id).order("criado_em", { ascending: false }).limit(1).maybeSingle();
     const { data: candExistente } = await adminClient.from("candidaturas").select("id, status, vaga_interesse, criado_em").eq("candidato_id", cand.id).eq("loja_id", loja.id).is("cargo_id", null).maybeSingle();
     if (candExistente) {

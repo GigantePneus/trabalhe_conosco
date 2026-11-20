@@ -132,6 +132,11 @@ export function normalizeCargoSubfolderName(rawTitle?: string | null): string {
     return 'Recepcionista';
   }
 
+  // 7. Borracheiro
+  if (/borrach/i.test(lower)) {
+    return 'Borracheiro';
+  }
+
   // Fallback limpo: remove barras e caracteres especiais de filesystem
   return clean
     .replace(/[/\\?%*:|"<>]/g, ' - ')

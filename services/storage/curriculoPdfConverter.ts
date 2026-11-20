@@ -253,59 +253,99 @@ function buildPdfFromPng(pngBuffer: Buffer, width: number, height: number): Buff
 function extractTextFromDocx(buffer: Buffer): string[] {
   const paragraphs: string[] = [];
   try {
-    let offset = 0;
-    while (offset < buffer.length - 30) {
-      // Procura assinatura de Local File Header (0x50 0x4B 0x03 0x04)
+    let xmlContent = '';
+
+    // 1. Tentar localizar via Central Directory do ZIP (0x50 0x4b 0x01 0x02) - mais robusto com bit 3 / data descriptors
+    let cdOffset = 0;
+    while (cdOffset < buffer.length - 46) {
       if (
-        buffer[offset] === 0x50 &&
-        buffer[offset + 1] === 0x4b &&
-        buffer[offset + 2] === 0x03 &&
-        buffer[offset + 3] === 0x04
+        buffer[cdOffset] === 0x50 &&
+        buffer[cdOffset + 1] === 0x4b &&
+        buffer[cdOffset + 2] === 0x01 &&
+        buffer[cdOffset + 3] === 0x02
       ) {
-        const compression = buffer.readUInt16LE(offset + 8);
-        const compressedSize = buffer.readUInt32LE(offset + 18);
-        const fileNameLength = buffer.readUInt16LE(offset + 26);
-        const extraFieldLength = buffer.readUInt16LE(offset + 28);
-        const fileName = buffer.toString('utf8', offset + 30, offset + 30 + fileNameLength);
-        const dataOffset = offset + 30 + fileNameLength + extraFieldLength;
+        const compression = buffer.readUInt16LE(cdOffset + 10);
+        const compressedSize = buffer.readUInt32LE(cdOffset + 20);
+        const fileNameLength = buffer.readUInt16LE(cdOffset + 28);
+        const extraFieldLength = buffer.readUInt16LE(cdOffset + 30);
+        const fileCommentLength = buffer.readUInt16LE(cdOffset + 32);
+        const localHeaderOffset = buffer.readUInt32LE(cdOffset + 42);
+        const fileName = buffer.toString('utf8', cdOffset + 46, cdOffset + 46 + fileNameLength);
 
         if (fileName === 'word/document.xml') {
+          const localFileNameLength = buffer.readUInt16LE(localHeaderOffset + 26);
+          const localExtraFieldLength = buffer.readUInt16LE(localHeaderOffset + 28);
+          const dataOffset = localHeaderOffset + 30 + localFileNameLength + localExtraFieldLength;
           const compressedData = buffer.subarray(dataOffset, dataOffset + compressedSize);
-          let xmlContent = '';
+
           if (compression === 8) {
             xmlContent = zlib.inflateRawSync(compressedData).toString('utf8');
           } else if (compression === 0) {
             xmlContent = compressedData.toString('utf8');
           }
-
-          // Parseia parágrafos <w:p>
-          const pRegex = /<w:p\b[^>]*>(.*?)<\/w:p>/gs;
-          let match: RegExpExecArray | null;
-          while ((match = pRegex.exec(xmlContent)) !== null) {
-            const pContent = match[1];
-            // Extrai textos <w:t>
-            const tRegex = /<w:t\b[^>]*>(.*?)<\/w:t>/gs;
-            let tMatch: RegExpExecArray | null;
-            let pText = '';
-            while ((tMatch = tRegex.exec(pContent)) !== null) {
-              pText += tMatch[1];
-            }
-            if (pText.trim()) {
-              // Decodifica entidades XML
-              const decoded = pText
-                .replace(/&amp;/g, '&')
-                .replace(/&lt;/g, '<')
-                .replace(/&gt;/g, '>')
-                .replace(/&quot;/g, '"')
-                .replace(/&apos;/g, "'");
-              paragraphs.push(decoded.trim());
-            }
-          }
           break;
         }
-        offset = dataOffset + compressedSize;
+
+        cdOffset += 46 + fileNameLength + extraFieldLength + fileCommentLength;
       } else {
-        offset++;
+        cdOffset++;
+      }
+    }
+
+    // 2. Se não encontrou via Central Directory, tentar varredura por Local File Header (0x50 0x4B 0x03 0x04)
+    if (!xmlContent) {
+      let offset = 0;
+      while (offset < buffer.length - 30) {
+        if (
+          buffer[offset] === 0x50 &&
+          buffer[offset + 1] === 0x4b &&
+          buffer[offset + 2] === 0x03 &&
+          buffer[offset + 3] === 0x04
+        ) {
+          const compression = buffer.readUInt16LE(offset + 8);
+          const compressedSize = buffer.readUInt32LE(offset + 18);
+          const fileNameLength = buffer.readUInt16LE(offset + 26);
+          const extraFieldLength = buffer.readUInt16LE(offset + 28);
+          const fileName = buffer.toString('utf8', offset + 30, offset + 30 + fileNameLength);
+          const dataOffset = offset + 30 + fileNameLength + extraFieldLength;
+
+          if (fileName === 'word/document.xml' && compressedSize > 0) {
+            const compressedData = buffer.subarray(dataOffset, dataOffset + compressedSize);
+            if (compression === 8) {
+              xmlContent = zlib.inflateRawSync(compressedData).toString('utf8');
+            } else if (compression === 0) {
+              xmlContent = compressedData.toString('utf8');
+            }
+            break;
+          }
+          offset = compressedSize > 0 ? (dataOffset + compressedSize) : (offset + 1);
+        } else {
+          offset++;
+        }
+      }
+    }
+
+    // 3. Parsear parágrafos <w:p>
+    if (xmlContent) {
+      const pRegex = /<w:p\b[^>]*>(.*?)<\/w:p>/gs;
+      let match: RegExpExecArray | null;
+      while ((match = pRegex.exec(xmlContent)) !== null) {
+        const pContent = match[1];
+        const tRegex = /<w:t\b[^>]*>(.*?)<\/w:t>/gs;
+        let tMatch: RegExpExecArray | null;
+        let pText = '';
+        while ((tMatch = tRegex.exec(pContent)) !== null) {
+          pText += tMatch[1];
+        }
+        if (pText.trim()) {
+          const decoded = pText
+            .replace(/&amp;/g, '&')
+            .replace(/&lt;/g, '<')
+            .replace(/&gt;/g, '>')
+            .replace(/&quot;/g, '"')
+            .replace(/&apos;/g, "'");
+          paragraphs.push(decoded.trim());
+        }
       }
     }
   } catch (err: any) {

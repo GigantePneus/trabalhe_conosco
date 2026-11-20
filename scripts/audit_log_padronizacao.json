@@ -1,0 +1,722 @@
+[
+  {
+    "candidaturaId": "6c7ec13e-df80-496e-afed-7f0f2817c066",
+    "candidatoId": "81ecc496-151a-4e7a-a4be-5c1d5ab660d8",
+    "candidatoNome": "Ferdinam Gomes de Oliveira",
+    "lojaId": "5cfb824e-7031-4ea0-94ae-a464f6332091",
+    "lojaNome": "Gigante Pneus - Goiânia",
+    "cargoAnterior": "Mecânico",
+    "cargoPadronizado": "Mecânico Automotivo",
+    "timestamp": "2026-11-20T00:12:52.351Z"
+  },
+  {
+    "candidaturaId": "262575ac-f3bc-44fd-b1ca-4b2020ea9f33",
+    "candidatoId": "76393c64-9620-4f0b-864c-bc47fd1ae986",
+    "candidatoNome": "Gilcimar da Silva Rocha",
+    "lojaId": "5cfb824e-7031-4ea0-94ae-a464f6332091",
+    "lojaNome": "Gigante Pneus - Goiânia",
+    "cargoAnterior": "Mecânico",
+    "cargoPadronizado": "Mecânico Automotivo",
+    "timestamp": "2026-11-20T00:12:53.024Z"
+  },
+  {
+    "candidaturaId": "2ae7f331-47db-4a49-b768-6ef6b8feb7f9",
+    "candidatoId": "483f1fc1-f941-44ad-ad0e-d457bde86a0f",
+    "candidatoNome": "Luiz Felipe",
+    "lojaId": "1cbb63f7-0e2f-4042-a56d-245479cfa1b0",
+    "lojaNome": "Gigante Pneus - Goiânia 2",
+    "cargoAnterior": "Mecânico",
+    "cargoPadronizado": "Mecânico Automotivo",
+    "timestamp": "2026-11-20T00:12:53.642Z"
+  },
+  {
+    "candidaturaId": "de450cca-93c2-4102-81db-0d4df8821421",
+    "candidatoId": "4227c8cb-7865-4bf2-93a8-4a2d0c0a4df3",
+    "candidatoNome": "Rogerio Lemos de Lima",
+    "lojaId": "1cbb63f7-0e2f-4042-a56d-245479cfa1b0",
+    "lojaNome": "Gigante Pneus - Goiânia 2",
+    "cargoAnterior": "Mecânico",
+    "cargoPadronizado": "Mecânico Automotivo",
+    "timestamp": "2026-11-20T00:12:54.255Z"
+  },
+  {
+    "candidaturaId": "27db31b1-8981-4114-bb94-079e5b612541",
+    "candidatoId": "cc4135a3-8f3e-47bc-bbd8-547a8f6f9ad2",
+    "candidatoNome": "Lélio",
+    "lojaId": "1cbb63f7-0e2f-4042-a56d-245479cfa1b0",
+    "lojaNome": "Gigante Pneus - Goiânia 2",
+    "cargoAnterior": "Mecânico",
+    "cargoPadronizado": "Mecânico Automotivo",
+    "timestamp": "2026-11-20T00:12:54.889Z"
+  },
+  {
+    "candidaturaId": "50fa5917-ae69-4298-aa6f-81f02ef6b7e5",
+    "candidatoId": "d10223f0-020f-4d39-8250-0da639675c5c",
+    "candidatoNome": "Adriana Moura de Sousa",
+    "lojaId": "5cfb824e-7031-4ea0-94ae-a464f6332091",
+    "lojaNome": "Gigante Pneus - Goiânia",
+    "cargoAnterior": "Recepcionista",
+    "cargoPadronizado": "Recepcionista de Centro Automotivo",
+    "timestamp": "2026-11-20T00:12:55.564Z"
+  },
+  {
+    "candidaturaId": "08b9679a-67aa-459a-a7a1-485161745109",
+    "candidatoId": "7f800be8-3556-4670-bd82-53595ff59774",
+    "candidatoNome": "Ana Carolina Costa Duartе",
+    "lojaId": "5cfb824e-7031-4ea0-94ae-a464f6332091",
+    "lojaNome": "Gigante Pneus - Goiânia",
+    "cargoAnterior": "Recepcionista",
+    "cargoPadronizado": "Recepcionista de Centro Automotivo",
+    "timestamp": "2026-11-20T00:12:55.795Z"
+  },
+  {
+    "candidaturaId": "b35873f1-b5d6-4bd9-af42-27f61f8351d5",
+    "candidatoId": "33ae0df6-2f84-4823-b210-ae4948488e1f",
+    "candidatoNome": "Gabriela Luiza de Sousa",
+    "lojaId": "5cfb824e-7031-4ea0-94ae-a464f6332091",
+    "lojaNome": "Gigante Pneus - Goiânia",
+    "cargoAnterior": "Recepcionista",
+    "cargoPadronizado": "Recepcionista de Centro Automotivo",
+    "timestamp": "2026-11-20T00:12:56.025Z"
+  },
+  {
+    "candidaturaId": "afa09eac-5a88-4e8b-bec7-aa6395fa7608",
+    "candidatoId": "cb9821fb-d33a-456b-8e72-585f5c349540",
+    "candidatoNome": "Daiane Santos de Jesus",
+    "lojaId": "5cfb824e-7031-4ea0-94ae-a464f6332091",
+    "lojaNome": "Gigante Pneus - Goiânia",
+    "cargoAnterior": "Recepcionista",
+    "cargoPadronizado": "Recepcionista de Centro Automotivo",
+    "timestamp": "2026-11-20T00:12:56.667Z"
+  },
+  {
+    "candidaturaId": "c494dbff-b527-485d-af9f-88c0a6e061a4",
+    "candidatoId": "4777c0a8-4f57-4e0d-a628-ef9021160430",
+    "candidatoNome": "Emeli",
+    "lojaId": "5cfb824e-7031-4ea0-94ae-a464f6332091",
+    "lojaNome": "Gigante Pneus - Goiânia",
+    "cargoAnterior": "Recepcionista",
+    "cargoPadronizado": "Recepcionista de Centro Automotivo",
+    "timestamp": "2026-11-20T00:12:57.305Z"
+  },
+  {
+    "candidaturaId": "94360ed7-664e-4ff1-baf2-3417936e3054",
+    "candidatoId": "c7939796-e373-4d94-84b8-a30ff50ffbfc",
+    "candidatoNome": "Edilson José Alves da Silva Filho",
+    "lojaId": "5cfb824e-7031-4ea0-94ae-a464f6332091",
+    "lojaNome": "Gigante Pneus - Goiânia",
+    "cargoAnterior": "Mecânico",
+    "cargoPadronizado": "Mecânico Automotivo",
+    "timestamp": "2026-11-20T00:12:57.547Z"
+  },
+  {
+    "candidaturaId": "4dcb7e3e-8020-40da-9730-2bd87b28403f",
+    "candidatoId": "9e2cf5d1-78f6-46f8-ad1f-dd394afc4b69",
+    "candidatoNome": "Eduardo Lucas Vermelho Santos",
+    "lojaId": "5cfb824e-7031-4ea0-94ae-a464f6332091",
+    "lojaNome": "Gigante Pneus - Goiânia",
+    "cargoAnterior": "Mecânico",
+    "cargoPadronizado": "Mecânico Automotivo",
+    "timestamp": "2026-11-20T00:12:57.785Z"
+  },
+  {
+    "candidaturaId": "c8d22fbe-fa10-4682-8789-82b32c525b51",
+    "candidatoId": "8349ab8b-ac54-438b-b644-510966c266a1",
+    "candidatoNome": "Núbia Simey",
+    "lojaId": "1cbb63f7-0e2f-4042-a56d-245479cfa1b0",
+    "lojaNome": "Gigante Pneus - Goiânia 2",
+    "cargoAnterior": "Recepcionista",
+    "cargoPadronizado": "Recepcionista de Centro Automotivo",
+    "timestamp": "2026-11-20T00:12:58.067Z"
+  },
+  {
+    "candidaturaId": "96db3460-5ecb-4fa4-8991-89a1bb4644cc",
+    "candidatoId": "146c90c6-16e8-4ff3-a08d-de7298797908",
+    "candidatoNome": "Emilly Da Silva Dos santos",
+    "lojaId": "5cfb824e-7031-4ea0-94ae-a464f6332091",
+    "lojaNome": "Gigante Pneus - Goiânia",
+    "cargoAnterior": "Recepcionista",
+    "cargoPadronizado": "Recepcionista de Centro Automotivo",
+    "timestamp": "2026-11-20T00:12:58.311Z"
+  },
+  {
+    "candidaturaId": "b83e68f5-0fa6-4da1-8a5e-8a4befa08fd5",
+    "candidatoId": "83d7f824-21cc-43a1-8aa3-df7ab65dca34",
+    "candidatoNome": "Glauciene Alves Luiz dos Santos",
+    "lojaId": "5cfb824e-7031-4ea0-94ae-a464f6332091",
+    "lojaNome": "Gigante Pneus - Goiânia",
+    "cargoAnterior": "Recepcionista",
+    "cargoPadronizado": "Recepcionista de Centro Automotivo",
+    "timestamp": "2026-11-20T00:12:58.532Z"
+  },
+  {
+    "candidaturaId": "50769729-ba7b-4e58-ac00-d599ba40c0b9",
+    "candidatoId": "5ab5e945-271e-47f0-834f-ef42915285b7",
+    "candidatoNome": "Juliane da Cruz Silva",
+    "lojaId": "5cfb824e-7031-4ea0-94ae-a464f6332091",
+    "lojaNome": "Gigante Pneus - Goiânia",
+    "cargoAnterior": "Recepcionista",
+    "cargoPadronizado": "Recepcionista de Centro Automotivo",
+    "timestamp": "2026-11-20T00:12:58.809Z"
+  },
+  {
+    "candidaturaId": "0b02d4b9-965e-4c8b-b2eb-b8ed397b9d42",
+    "candidatoId": "b89f1208-ac0a-4d3f-b423-c6948abb72ee",
+    "candidatoNome": "Laura Giordana",
+    "lojaId": "5cfb824e-7031-4ea0-94ae-a464f6332091",
+    "lojaNome": "Gigante Pneus - Goiânia",
+    "cargoAnterior": "Recepcionista",
+    "cargoPadronizado": "Recepcionista de Centro Automotivo",
+    "timestamp": "2026-11-20T00:12:59.117Z"
+  },
+  {
+    "candidaturaId": "dded7b3e-5043-4594-8c03-0fb3473cdf12",
+    "candidatoId": "136a8c7b-fb45-4f8c-a025-b5971532ed75",
+    "candidatoNome": "Luana Rodrigues de Sousa",
+    "lojaId": "1cbb63f7-0e2f-4042-a56d-245479cfa1b0",
+    "lojaNome": "Gigante Pneus - Goiânia 2",
+    "cargoAnterior": "Recepcionista",
+    "cargoPadronizado": "Recepcionista de Centro Automotivo",
+    "timestamp": "2026-11-20T00:12:59.424Z"
+  },
+  {
+    "candidaturaId": "b71a5b2f-92b9-4279-af21-42e45e8c7cd1",
+    "candidatoId": "997afb04-5a60-4842-a8da-c59c8dbd81a1",
+    "candidatoNome": "Gabriela Alves Rodrigues",
+    "lojaId": "5cfb824e-7031-4ea0-94ae-a464f6332091",
+    "lojaNome": "Gigante Pneus - Goiânia",
+    "cargoAnterior": "Recepcionista",
+    "cargoPadronizado": "Recepcionista de Centro Automotivo",
+    "timestamp": "2026-11-20T00:13:00.034Z"
+  },
+  {
+    "candidaturaId": "17fa7adf-a181-44ec-b609-842f7f2975a8",
+    "candidatoId": "4d693794-83ec-4133-898c-fe45149ef821",
+    "candidatoNome": "Izabela",
+    "lojaId": "5cfb824e-7031-4ea0-94ae-a464f6332091",
+    "lojaNome": "Gigante Pneus - Goiânia",
+    "cargoAnterior": "Recepcionista",
+    "cargoPadronizado": "Recepcionista de Centro Automotivo",
+    "timestamp": "2026-11-20T00:13:00.680Z"
+  },
+  {
+    "candidaturaId": "cb077181-2d2b-4001-8602-bc621329b1f2",
+    "candidatoId": "9ca00b9a-6ccc-4f41-affe-750b9fcfb917",
+    "candidatoNome": "Jhennifer Azevedo Dos Santos",
+    "lojaId": "5cfb824e-7031-4ea0-94ae-a464f6332091",
+    "lojaNome": "Gigante Pneus - Goiânia",
+    "cargoAnterior": "Recepcionista",
+    "cargoPadronizado": "Recepcionista de Centro Automotivo",
+    "timestamp": "2026-11-20T00:13:01.363Z"
+  },
+  {
+    "candidaturaId": "56230839-08af-414a-bbf9-b6b1da41fdf1",
+    "candidatoId": "e67f6878-67e9-49ff-b50a-d3f025131c5c",
+    "candidatoNome": "Karyelly Gabino Marinho",
+    "lojaId": "5cfb824e-7031-4ea0-94ae-a464f6332091",
+    "lojaNome": "Gigante Pneus - Goiânia",
+    "cargoAnterior": "Recepcionista",
+    "cargoPadronizado": "Recepcionista de Centro Automotivo",
+    "timestamp": "2026-11-20T00:13:01.659Z"
+  },
+  {
+    "candidaturaId": "9dd04e69-af38-4ecc-a5bd-19973a7be290",
+    "candidatoId": "48ab3d9d-6f30-44e7-bb36-af4164d4fca9",
+    "candidatoNome": "Lohayne Estefane",
+    "lojaId": "5cfb824e-7031-4ea0-94ae-a464f6332091",
+    "lojaNome": "Gigante Pneus - Goiânia",
+    "cargoAnterior": "Recepcionista",
+    "cargoPadronizado": "Recepcionista de Centro Automotivo",
+    "timestamp": "2026-11-20T00:13:01.940Z"
+  },
+  {
+    "candidaturaId": "021206a2-7bef-4852-952a-fec8560d462c",
+    "candidatoId": "64344140-d047-4776-8ad6-c453c448f411",
+    "candidatoNome": "Giovana",
+    "lojaId": "5cfb824e-7031-4ea0-94ae-a464f6332091",
+    "lojaNome": "Gigante Pneus - Goiânia",
+    "cargoAnterior": "Recepcionista",
+    "cargoPadronizado": "Recepcionista de Centro Automotivo",
+    "timestamp": "2026-11-20T00:13:02.189Z"
+  },
+  {
+    "candidaturaId": "b5968e4c-e8ae-4782-be95-77b0ba3c68ea",
+    "candidatoId": "70b2179a-287d-422d-89ac-d55e4167afeb",
+    "candidatoNome": "Jhenyfer Kauane B. Ribeiro",
+    "lojaId": "5cfb824e-7031-4ea0-94ae-a464f6332091",
+    "lojaNome": "Gigante Pneus - Goiânia",
+    "cargoAnterior": "Recepcionista",
+    "cargoPadronizado": "Recepcionista de Centro Automotivo",
+    "timestamp": "2026-11-20T00:13:02.496Z"
+  },
+  {
+    "candidaturaId": "e5d06b36-5d40-42ee-bc69-303222e32f91",
+    "candidatoId": "b6af67ab-a350-4719-98eb-e2f864088878",
+    "candidatoNome": "Larissa de Fátima",
+    "lojaId": "5cfb824e-7031-4ea0-94ae-a464f6332091",
+    "lojaNome": "Gigante Pneus - Goiânia",
+    "cargoAnterior": "Recepcionista",
+    "cargoPadronizado": "Recepcionista de Centro Automotivo",
+    "timestamp": "2026-11-20T00:13:02.749Z"
+  },
+  {
+    "candidaturaId": "dae16ca3-44b2-4572-aea8-fba960c57d0f",
+    "candidatoId": "31618c33-e4df-4427-9518-a5ad89e12531",
+    "candidatoNome": "Lorrayne",
+    "lojaId": "5cfb824e-7031-4ea0-94ae-a464f6332091",
+    "lojaNome": "Gigante Pneus - Goiânia",
+    "cargoAnterior": "Recepcionista",
+    "cargoPadronizado": "Recepcionista de Centro Automotivo",
+    "timestamp": "2026-11-20T00:13:02.988Z"
+  },
+  {
+    "candidaturaId": "21df1b64-5a94-4429-9737-ef4a50769a99",
+    "candidatoId": "f2c08b3a-3dd1-47b7-9d3a-cfe48cdbfcdd",
+    "candidatoNome": "Luana Miranda Martins",
+    "lojaId": "1cbb63f7-0e2f-4042-a56d-245479cfa1b0",
+    "lojaNome": "Gigante Pneus - Goiânia 2",
+    "cargoAnterior": "Recepcionista",
+    "cargoPadronizado": "Recepcionista de Centro Automotivo",
+    "timestamp": "2026-11-20T00:13:03.251Z"
+  },
+  {
+    "candidaturaId": "ed384d32-3462-4b3e-af28-9665870bb248",
+    "candidatoId": "7f316d5c-a879-45bb-9337-814a9b558e10",
+    "candidatoNome": "Mara",
+    "lojaId": "1cbb63f7-0e2f-4042-a56d-245479cfa1b0",
+    "lojaNome": "Gigante Pneus - Goiânia 2",
+    "cargoAnterior": "Recepcionista",
+    "cargoPadronizado": "Recepcionista de Centro Automotivo",
+    "timestamp": "2026-11-20T00:13:03.911Z"
+  },
+  {
+    "candidaturaId": "043140bd-211e-44a4-9cf2-f359f1fe0661",
+    "candidatoId": "28f5b046-39ec-4416-973c-3fc02dff47ce",
+    "candidatoNome": "Marcos Felippe",
+    "lojaId": "1cbb63f7-0e2f-4042-a56d-245479cfa1b0",
+    "lojaNome": "Gigante Pneus - Goiânia 2",
+    "cargoAnterior": "Recepcionista",
+    "cargoPadronizado": "Recepcionista de Centro Automotivo",
+    "timestamp": "2026-11-20T00:13:04.156Z"
+  },
+  {
+    "candidaturaId": "3891969a-24d7-4616-8a17-0f6202bf5101",
+    "candidatoId": "561be289-8e53-42f7-aa93-64fca372bafc",
+    "candidatoNome": "Marcos Júnior Souza",
+    "lojaId": "1cbb63f7-0e2f-4042-a56d-245479cfa1b0",
+    "lojaNome": "Gigante Pneus - Goiânia 2",
+    "cargoAnterior": "Recepcionista",
+    "cargoPadronizado": "Recepcionista de Centro Automotivo",
+    "timestamp": "2026-11-20T00:13:04.403Z"
+  },
+  {
+    "candidaturaId": "ef4bce89-582f-46a2-a617-b54e2672d29f",
+    "candidatoId": "1e3510b9-e7b4-4c70-a56a-4b5eee03e064",
+    "candidatoNome": "Michelly",
+    "lojaId": "1cbb63f7-0e2f-4042-a56d-245479cfa1b0",
+    "lojaNome": "Gigante Pneus - Goiânia 2",
+    "cargoAnterior": "Recepcionista",
+    "cargoPadronizado": "Recepcionista de Centro Automotivo",
+    "timestamp": "2026-11-20T00:13:04.621Z"
+  },
+  {
+    "candidaturaId": "e5d100dc-62f7-4e87-bb85-fc719011b323",
+    "candidatoId": "d048d206-26f3-47b1-a02d-c0120834ab37",
+    "candidatoNome": "Natalice Nunes",
+    "lojaId": "1cbb63f7-0e2f-4042-a56d-245479cfa1b0",
+    "lojaNome": "Gigante Pneus - Goiânia 2",
+    "cargoAnterior": "Recepcionista",
+    "cargoPadronizado": "Recepcionista de Centro Automotivo",
+    "timestamp": "2026-11-20T00:13:04.851Z"
+  },
+  {
+    "candidaturaId": "5a50d3df-5120-4346-8d35-2e972e837a67",
+    "candidatoId": "a26e2f73-91c0-4597-94d5-670954573513",
+    "candidatoNome": "Nathalia",
+    "lojaId": "1cbb63f7-0e2f-4042-a56d-245479cfa1b0",
+    "lojaNome": "Gigante Pneus - Goiânia 2",
+    "cargoAnterior": "Recepcionista",
+    "cargoPadronizado": "Recepcionista de Centro Automotivo",
+    "timestamp": "2026-11-20T00:13:05.160Z"
+  },
+  {
+    "candidaturaId": "594a5ef4-314a-4a21-8d32-744d44602833",
+    "candidatoId": "e48c617c-cf54-448a-b671-bf9fec758d60",
+    "candidatoNome": "Rosiane",
+    "lojaId": "1cbb63f7-0e2f-4042-a56d-245479cfa1b0",
+    "lojaNome": "Gigante Pneus - Goiânia 2",
+    "cargoAnterior": "Recepcionista",
+    "cargoPadronizado": "Recepcionista de Centro Automotivo",
+    "timestamp": "2026-11-20T00:13:05.393Z"
+  },
+  {
+    "candidaturaId": "a9de88f5-ed92-41d7-b43a-bfa890be95b9",
+    "candidatoId": "030e9e95-9b76-4628-8e17-7e427136bc96",
+    "candidatoNome": "Sabrina Cardoso Printes",
+    "lojaId": "1cbb63f7-0e2f-4042-a56d-245479cfa1b0",
+    "lojaNome": "Gigante Pneus - Goiânia 2",
+    "cargoAnterior": "Recepcionista",
+    "cargoPadronizado": "Recepcionista de Centro Automotivo",
+    "timestamp": "2026-11-20T00:13:05.613Z"
+  },
+  {
+    "candidaturaId": "d414948d-a7ad-49e9-b38b-5a8f887d97c5",
+    "candidatoId": "120b5965-611a-4fb1-9233-b46baae34e3c",
+    "candidatoNome": "Sara Sodré Abrahão Guadelup",
+    "lojaId": "1cbb63f7-0e2f-4042-a56d-245479cfa1b0",
+    "lojaNome": "Gigante Pneus - Goiânia 2",
+    "cargoAnterior": "Recepcionista",
+    "cargoPadronizado": "Recepcionista de Centro Automotivo",
+    "timestamp": "2026-11-20T00:13:05.875Z"
+  },
+  {
+    "candidaturaId": "a6536289-0317-4b11-9053-ac33796df97f",
+    "candidatoId": "df033c89-42df-4566-8b66-6ca126065a58",
+    "candidatoNome": "Steffanny Misael Santos Souza",
+    "lojaId": "1cbb63f7-0e2f-4042-a56d-245479cfa1b0",
+    "lojaNome": "Gigante Pneus - Goiânia 2",
+    "cargoAnterior": "Recepcionista",
+    "cargoPadronizado": "Recepcionista de Centro Automotivo",
+    "timestamp": "2026-11-20T00:13:06.113Z"
+  },
+  {
+    "candidaturaId": "f0497eaf-9397-4570-a0da-1b24a7bc45e6",
+    "candidatoId": "2cdaa7e8-0f2a-4078-a635-ec9750614b07",
+    "candidatoNome": "Tássia Kellen Rodrigues Araújo",
+    "lojaId": "1cbb63f7-0e2f-4042-a56d-245479cfa1b0",
+    "lojaNome": "Gigante Pneus - Goiânia 2",
+    "cargoAnterior": "Recepcionista",
+    "cargoPadronizado": "Recepcionista de Centro Automotivo",
+    "timestamp": "2026-11-20T00:13:06.326Z"
+  },
+  {
+    "candidaturaId": "937faef3-201e-4c07-a388-1486ecbea9f0",
+    "candidatoId": "270e2b39-826b-469e-aaeb-876cf52c7c6f",
+    "candidatoNome": "Tatiana Bueno Neves",
+    "lojaId": "1cbb63f7-0e2f-4042-a56d-245479cfa1b0",
+    "lojaNome": "Gigante Pneus - Goiânia 2",
+    "cargoAnterior": "Recepcionista",
+    "cargoPadronizado": "Recepcionista de Centro Automotivo",
+    "timestamp": "2026-11-20T00:13:06.566Z"
+  },
+  {
+    "candidaturaId": "b28a70b6-dc4b-499a-a9a3-f111a736e06f",
+    "candidatoId": "5d6911e3-fa9a-4336-869f-560bbcd50a10",
+    "candidatoNome": "Tatiane Barsanulfo de Souza",
+    "lojaId": "1cbb63f7-0e2f-4042-a56d-245479cfa1b0",
+    "lojaNome": "Gigante Pneus - Goiânia 2",
+    "cargoAnterior": "Recepcionista",
+    "cargoPadronizado": "Recepcionista de Centro Automotivo",
+    "timestamp": "2026-11-20T00:13:07.132Z"
+  },
+  {
+    "candidaturaId": "87ee3ceb-e18c-41b9-b7dc-71dbf5803624",
+    "candidatoId": "175d322d-f98f-478c-b959-2a193917ca74",
+    "candidatoNome": "Thaís Mendonça Santos Pereira",
+    "lojaId": "1cbb63f7-0e2f-4042-a56d-245479cfa1b0",
+    "lojaNome": "Gigante Pneus - Goiânia 2",
+    "cargoAnterior": "Recepcionista",
+    "cargoPadronizado": "Recepcionista de Centro Automotivo",
+    "timestamp": "2026-11-20T00:13:07.355Z"
+  },
+  {
+    "candidaturaId": "41452c3d-c9a8-4fe6-a810-beb2d7a533c4",
+    "candidatoId": "c0b59195-23bb-4282-9532-645123f48859",
+    "candidatoNome": "Thaylane",
+    "lojaId": "1cbb63f7-0e2f-4042-a56d-245479cfa1b0",
+    "lojaNome": "Gigante Pneus - Goiânia 2",
+    "cargoAnterior": "Recepcionista",
+    "cargoPadronizado": "Recepcionista de Centro Automotivo",
+    "timestamp": "2026-11-20T00:13:07.585Z"
+  },
+  {
+    "candidaturaId": "9fde5f9d-f4b0-4e15-b349-11b9fc7d8bb7",
+    "candidatoId": "050a5b95-1eeb-48c3-86cf-a10fe1ecc8ee",
+    "candidatoNome": "Wendel Miguel Pereira dos Santos",
+    "lojaId": "1cbb63f7-0e2f-4042-a56d-245479cfa1b0",
+    "lojaNome": "Gigante Pneus - Goiânia 2",
+    "cargoAnterior": "Recepcionista",
+    "cargoPadronizado": "Recepcionista de Centro Automotivo",
+    "timestamp": "2026-11-20T00:13:07.825Z"
+  },
+  {
+    "candidaturaId": "cc774b50-9dcd-4e1d-b7a2-955754a020d6",
+    "candidatoId": "0d69593e-3d75-49d2-acc3-c6710cd12d05",
+    "candidatoNome": "Carlos Eduardo Vasconcelos Arachiro",
+    "lojaId": "a5486659-5d74-4bf8-9d0d-55032376198a",
+    "lojaNome": "Gigante Pneus - Pirituba",
+    "cargoAnterior": "Alinhador",
+    "cargoPadronizado": "Alinhador Automotivo",
+    "timestamp": "2026-11-20T00:13:08.128Z"
+  },
+  {
+    "candidaturaId": "1794ce86-cca5-46d5-aff2-c19ad0db1781",
+    "candidatoId": "85e97894-f0bc-4f99-a1ec-c75695a5ad3c",
+    "candidatoNome": "Robson Gomes da Silva",
+    "lojaId": "a5486659-5d74-4bf8-9d0d-55032376198a",
+    "lojaNome": "Gigante Pneus - Pirituba",
+    "cargoAnterior": "Auxiliar de Pátio",
+    "cargoPadronizado": "Auxiliar de Pátio / Auxiliar de Mecânico",
+    "timestamp": "2026-11-20T00:13:08.435Z"
+  },
+  {
+    "candidaturaId": "25eead86-dc60-4b66-92ad-092f0ee11033",
+    "candidatoId": "43aa0639-f509-4794-875b-4088bb3136dc",
+    "candidatoNome": "Ademilson Morais da Silva",
+    "lojaId": "a5486659-5d74-4bf8-9d0d-55032376198a",
+    "lojaNome": "Gigante Pneus - Pirituba",
+    "cargoAnterior": "Auxiliar de Pátio",
+    "cargoPadronizado": "Auxiliar de Pátio / Auxiliar de Mecânico",
+    "timestamp": "2026-11-20T00:13:08.660Z"
+  },
+  {
+    "candidaturaId": "a43c84ba-0a5b-4e5b-a6a9-c7689ce70c77",
+    "candidatoId": "bc128679-9d63-48c9-a561-83607611ed5b",
+    "candidatoNome": "Anderson Ferreira Macedo",
+    "lojaId": "a5486659-5d74-4bf8-9d0d-55032376198a",
+    "lojaNome": "Gigante Pneus - Pirituba",
+    "cargoAnterior": "Auxiliar de Pátio",
+    "cargoPadronizado": "Auxiliar de Pátio / Auxiliar de Mecânico",
+    "timestamp": "2026-11-20T00:13:08.891Z"
+  },
+  {
+    "candidaturaId": "9a62c80a-c95e-4ad8-bcec-55ae7deeefde",
+    "candidatoId": "541dd3da-cac7-4945-a744-da89f7077a1e",
+    "candidatoNome": "Fernando",
+    "lojaId": "a5486659-5d74-4bf8-9d0d-55032376198a",
+    "lojaNome": "Gigante Pneus - Pirituba",
+    "cargoAnterior": "Auxiliar de Pátio",
+    "cargoPadronizado": "Auxiliar de Pátio / Auxiliar de Mecânico",
+    "timestamp": "2026-11-20T00:13:09.152Z"
+  },
+  {
+    "candidaturaId": "65ea590e-17c6-4e2b-bda8-ace2bd83581b",
+    "candidatoId": "cf2126d7-adf3-45d9-9385-082b79f7c9a2",
+    "candidatoNome": "Gabriel Oliveira da Silva Camargo",
+    "lojaId": "a5486659-5d74-4bf8-9d0d-55032376198a",
+    "lojaNome": "Gigante Pneus - Pirituba",
+    "cargoAnterior": "Auxiliar de Pátio",
+    "cargoPadronizado": "Auxiliar de Pátio / Auxiliar de Mecânico",
+    "timestamp": "2026-11-20T00:13:09.383Z"
+  },
+  {
+    "candidaturaId": "1eed63db-2314-43b9-9a5c-f223c09493d2",
+    "candidatoId": "640ee188-bdab-4194-9396-f6f37de827b3",
+    "candidatoNome": "João dos Santos",
+    "lojaId": "a5486659-5d74-4bf8-9d0d-55032376198a",
+    "lojaNome": "Gigante Pneus - Pirituba",
+    "cargoAnterior": "Auxiliar de Pátio",
+    "cargoPadronizado": "Auxiliar de Pátio / Auxiliar de Mecânico",
+    "timestamp": "2026-11-20T00:13:09.603Z"
+  },
+  {
+    "candidaturaId": "2ab10192-a63c-48b8-b866-2c00f9a05a3c",
+    "candidatoId": "8b73ebbd-f9a6-4c15-b538-ec1431899445",
+    "candidatoNome": "José Mauro",
+    "lojaId": "a5486659-5d74-4bf8-9d0d-55032376198a",
+    "lojaNome": "Gigante Pneus - Pirituba",
+    "cargoAnterior": "Auxiliar de Pátio",
+    "cargoPadronizado": "Auxiliar de Pátio / Auxiliar de Mecânico",
+    "timestamp": "2026-11-20T00:13:09.851Z"
+  },
+  {
+    "candidaturaId": "021fe4af-a9f2-465d-ae3c-7dd7e0e5b97d",
+    "candidatoId": "11b6c180-cdb5-40ee-8caa-84afa430e1ed",
+    "candidatoNome": "Leandro Augusto Lopes Messias",
+    "lojaId": "a5486659-5d74-4bf8-9d0d-55032376198a",
+    "lojaNome": "Gigante Pneus - Pirituba",
+    "cargoAnterior": "Auxiliar de Pátio",
+    "cargoPadronizado": "Auxiliar de Pátio / Auxiliar de Mecânico",
+    "timestamp": "2026-11-20T00:13:10.075Z"
+  },
+  {
+    "candidaturaId": "986e1023-fd90-4e74-ac83-ceaba0e59e09",
+    "candidatoId": "f075ef8b-9f55-4e3a-99e2-06f421bd0a29",
+    "candidatoNome": "Rafael Aparecido David Luiz",
+    "lojaId": "a5486659-5d74-4bf8-9d0d-55032376198a",
+    "lojaNome": "Gigante Pneus - Pirituba",
+    "cargoAnterior": "Auxiliar de Pátio",
+    "cargoPadronizado": "Auxiliar de Pátio / Auxiliar de Mecânico",
+    "timestamp": "2026-11-20T00:13:10.347Z"
+  },
+  {
+    "candidaturaId": "9f4200ee-b214-4a95-ba5f-ceb1374f9945",
+    "candidatoId": "f5a4fc4a-e3d5-42a6-9f3e-f076ff28dfad",
+    "candidatoNome": "Marcelo Triska Coza",
+    "lojaId": "a5486659-5d74-4bf8-9d0d-55032376198a",
+    "lojaNome": "Gigante Pneus - Pirituba",
+    "cargoAnterior": "Auxiliar de Pátio",
+    "cargoPadronizado": "Auxiliar de Pátio / Auxiliar de Mecânico",
+    "timestamp": "2026-11-20T00:13:10.689Z"
+  },
+  {
+    "candidaturaId": "522415b1-c074-4673-bebe-4a8b696451f0",
+    "candidatoId": "576358af-eac8-479d-8220-6b71aa6486b8",
+    "candidatoNome": "Marcello Martins Queiroz",
+    "lojaId": "a5486659-5d74-4bf8-9d0d-55032376198a",
+    "lojaNome": "Gigante Pneus - Pirituba",
+    "cargoAnterior": "Auxiliar de Pátio",
+    "cargoPadronizado": "Auxiliar de Pátio / Auxiliar de Mecânico",
+    "timestamp": "2026-11-20T00:13:10.922Z"
+  },
+  {
+    "candidaturaId": "4789f711-1f7a-4ef0-8bba-49a1ec615ed6",
+    "candidatoId": "ad5cdcb6-d2e2-43ca-9b90-a1d3bb463066",
+    "candidatoNome": "Vitórino Ruas dos Santos",
+    "lojaId": "a5486659-5d74-4bf8-9d0d-55032376198a",
+    "lojaNome": "Gigante Pneus - Pirituba",
+    "cargoAnterior": "Auxiliar de Pátio",
+    "cargoPadronizado": "Auxiliar de Pátio / Auxiliar de Mecânico",
+    "timestamp": "2026-11-20T00:13:11.551Z"
+  },
+  {
+    "candidaturaId": "808c7bb7-3c24-4624-8fac-40999e2aee47",
+    "candidatoId": "cf7fd7e0-5a6e-4d44-93a5-c09df144b50f",
+    "candidatoNome": "Pedro Paulo Celestino da Silva",
+    "lojaId": "a5486659-5d74-4bf8-9d0d-55032376198a",
+    "lojaNome": "Gigante Pneus - Pirituba",
+    "cargoAnterior": "Auxiliar de Pátio",
+    "cargoPadronizado": "Auxiliar de Pátio / Auxiliar de Mecânico",
+    "timestamp": "2026-11-20T00:13:11.815Z"
+  },
+  {
+    "candidaturaId": "881b4d93-1e8d-466e-b307-0ad7b8d98953",
+    "candidatoId": "91b77cbc-f284-46ce-831e-7add26adf652",
+    "candidatoNome": "André Santos Cunha",
+    "lojaId": "a5486659-5d74-4bf8-9d0d-55032376198a",
+    "lojaNome": "Gigante Pneus - Pirituba",
+    "cargoAnterior": "Mecânico",
+    "cargoPadronizado": "Mecânico Automotivo",
+    "timestamp": "2026-11-20T00:13:12.040Z"
+  },
+  {
+    "candidaturaId": "43e73ba1-d509-4ba1-8975-0d7b8729a5b6",
+    "candidatoId": "b356c9cb-67b6-465a-b9c2-2df3a469b8f1",
+    "candidatoNome": "Jaqueline",
+    "lojaId": "a5486659-5d74-4bf8-9d0d-55032376198a",
+    "lojaNome": "Gigante Pneus - Pirituba",
+    "cargoAnterior": "Auxiliar de Pátio",
+    "cargoPadronizado": "Auxiliar de Pátio / Auxiliar de Mecânico",
+    "timestamp": "2026-11-20T00:13:12.430Z"
+  },
+  {
+    "candidaturaId": "599a2fd3-8cf2-4648-903b-1556b10daf2a",
+    "candidatoId": "4905a561-8b92-4eae-a617-fee5105c4235",
+    "candidatoNome": "Erik Aparecido Frenhe",
+    "lojaId": "a5486659-5d74-4bf8-9d0d-55032376198a",
+    "lojaNome": "Gigante Pneus - Pirituba",
+    "cargoAnterior": "Mecânico",
+    "cargoPadronizado": "Mecânico Automotivo",
+    "timestamp": "2026-11-20T00:13:13.067Z"
+  },
+  {
+    "candidaturaId": "4803ac18-a381-4bd9-a82b-84a9c6c77e9e",
+    "candidatoId": "9cecdf81-4394-4f26-8b75-664cecd2acdf",
+    "candidatoNome": "Jorge Felix de Souza",
+    "lojaId": "a5486659-5d74-4bf8-9d0d-55032376198a",
+    "lojaNome": "Gigante Pneus - Pirituba",
+    "cargoAnterior": "Mecânico",
+    "cargoPadronizado": "Mecânico Automotivo",
+    "timestamp": "2026-11-20T00:13:13.350Z"
+  },
+  {
+    "candidaturaId": "16128057-0807-4d39-bfc6-d52616040353",
+    "candidatoId": "a9ee53e3-a557-4ef2-b07b-10644c8ddae4",
+    "candidatoNome": "Aroldo Rosendo",
+    "lojaId": "a5486659-5d74-4bf8-9d0d-55032376198a",
+    "lojaNome": "Gigante Pneus - Pirituba",
+    "cargoAnterior": "Mecânico",
+    "cargoPadronizado": "Mecânico Automotivo",
+    "timestamp": "2026-11-20T00:13:13.576Z"
+  },
+  {
+    "candidaturaId": "0ca9a732-f881-4ffd-a3e2-3de0022e5240",
+    "candidatoId": "3f53dff3-cd7b-46c9-b07f-fa044205306e",
+    "candidatoNome": "Fabiano Packer",
+    "lojaId": "a5486659-5d74-4bf8-9d0d-55032376198a",
+    "lojaNome": "Gigante Pneus - Pirituba",
+    "cargoAnterior": "Auxiliar de Pátio",
+    "cargoPadronizado": "Auxiliar de Pátio / Auxiliar de Mecânico",
+    "timestamp": "2026-11-20T00:13:13.836Z"
+  },
+  {
+    "candidaturaId": "c56e6e46-f475-4347-bf74-d1ee8b13ce4d",
+    "candidatoId": "22f499a3-eacf-48ea-9c88-5dc9fb0953b6",
+    "candidatoNome": "Marisa da Silva",
+    "lojaId": "a5486659-5d74-4bf8-9d0d-55032376198a",
+    "lojaNome": "Gigante Pneus - Pirituba",
+    "cargoAnterior": "Auxiliar de Pátio",
+    "cargoPadronizado": "Auxiliar de Pátio / Auxiliar de Mecânico",
+    "timestamp": "2026-11-20T00:13:14.077Z"
+  },
+  {
+    "candidaturaId": "e0a97e44-b469-4c65-a685-c269b5fa593d",
+    "candidatoId": "f46d9b26-cdaa-4075-93cb-0dada59ffe7d",
+    "candidatoNome": "Douglas Schwalbe da Silva Lemos",
+    "lojaId": "a5486659-5d74-4bf8-9d0d-55032376198a",
+    "lojaNome": "Gigante Pneus - Pirituba",
+    "cargoAnterior": "Mecânico",
+    "cargoPadronizado": "Mecânico Automotivo",
+    "timestamp": "2026-11-20T00:13:14.295Z"
+  },
+  {
+    "candidaturaId": "3e63dba8-34ff-4393-bfdd-3d8921732cb6",
+    "candidatoId": "99507425-7693-4067-993b-37e58f50d2b7",
+    "candidatoNome": "Jefferson Soares",
+    "lojaId": "a5486659-5d74-4bf8-9d0d-55032376198a",
+    "lojaNome": "Gigante Pneus - Pirituba",
+    "cargoAnterior": "Mecânico",
+    "cargoPadronizado": "Mecânico Automotivo",
+    "timestamp": "2026-11-20T00:13:14.513Z"
+  },
+  {
+    "candidaturaId": "c5f733e8-0717-4bd0-bb82-299fc4d9bce5",
+    "candidatoId": "240c5610-3e4b-4430-b099-b0c20cf100f9",
+    "candidatoNome": "Maurício de Souza Melo",
+    "lojaId": "a5486659-5d74-4bf8-9d0d-55032376198a",
+    "lojaNome": "Gigante Pneus - Pirituba",
+    "cargoAnterior": "Mecânico",
+    "cargoPadronizado": "Mecânico Automotivo",
+    "timestamp": "2026-11-20T00:13:14.728Z"
+  },
+  {
+    "candidaturaId": "9754916d-1abf-4007-9d34-ee918b471b3f",
+    "candidatoId": "d3213604-c395-44f2-bbe1-1e84051236ce",
+    "candidatoNome": "Carlos Eduardo Barbosa da Silva",
+    "lojaId": "a5486659-5d74-4bf8-9d0d-55032376198a",
+    "lojaNome": "Gigante Pneus - Pirituba",
+    "cargoAnterior": "Auxiliar de Pátio",
+    "cargoPadronizado": "Auxiliar de Pátio / Auxiliar de Mecânico",
+    "timestamp": "2026-11-20T00:13:15.396Z"
+  },
+  {
+    "candidaturaId": "c22546c8-4b30-4506-976b-2be5109af811",
+    "candidatoId": "a926aaf4-a068-4eab-84bf-f1532e9d355a",
+    "candidatoNome": "Luiz Carlos Garcia Magalhaes de",
+    "lojaId": "a5486659-5d74-4bf8-9d0d-55032376198a",
+    "lojaNome": "Gigante Pneus - Pirituba",
+    "cargoAnterior": "Auxiliar de Pátio",
+    "cargoPadronizado": "Auxiliar de Pátio / Auxiliar de Mecânico",
+    "timestamp": "2026-11-20T00:13:15.623Z"
+  },
+  {
+    "candidaturaId": "b8eea9e0-bfbb-4c7d-bb26-3ab4f0dbb29c",
+    "candidatoId": "ec743556-b5af-4604-ae2b-55c685eb74ac",
+    "candidatoNome": "Fábio Lopes da Silva",
+    "lojaId": "a5486659-5d74-4bf8-9d0d-55032376198a",
+    "lojaNome": "Gigante Pneus - Pirituba",
+    "cargoAnterior": "Mecânico",
+    "cargoPadronizado": "Mecânico Automotivo",
+    "timestamp": "2026-11-20T00:13:16.424Z"
+  },
+  {
+    "candidaturaId": "6284a127-3a32-42f1-a177-f36f032ac03d",
+    "candidatoId": "32ed95b0-c2fe-4c08-b3a4-61301328e332",
+    "candidatoNome": "Kauã Patrick dos Santos Pereira",
+    "lojaId": "a5486659-5d74-4bf8-9d0d-55032376198a",
+    "lojaNome": "Gigante Pneus - Pirituba",
+    "cargoAnterior": "Mecânico",
+    "cargoPadronizado": "Mecânico Automotivo",
+    "timestamp": "2026-11-20T00:13:17.034Z"
+  }
+]

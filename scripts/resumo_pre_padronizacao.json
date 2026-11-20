@@ -1,0 +1,56 @@
+{
+  "Gigante Pneus - Goiânia": {
+    "total": 39,
+    "cargos": {
+      "Mecânico": 4,
+      "Recepcionista": 18,
+      "Consultor de Vendas": 17
+    },
+    "origens": {
+      "migracao_drive": 39
+    },
+    "comCargoId": 0,
+    "semCargoId": 39
+  },
+  "Gigante Pneus - Goiânia 2": {
+    "total": 38,
+    "cargos": {
+      "Mecânico": 3,
+      "Recepcionista": 19,
+      "Consultor de Vendas": 16
+    },
+    "origens": {
+      "migracao_drive": 38
+    },
+    "comCargoId": 0,
+    "semCargoId": 38
+  },
+  "Gigante Pneus - Jundiaí": {
+    "total": 5,
+    "cargos": {
+      "Consultor de Vendas": 1,
+      "Mecânico Automotivo": 4
+    },
+    "origens": {
+      "homologacao_arquivada": 1,
+      "migracao_drive": 4
+    },
+    "comCargoId": 4,
+    "semCargoId": 1
+  },
+  "Gigante Pneus - Pirituba": {
+    "total": 50,
+    "cargos": {
+      "Alinhador": 1,
+      "Auxiliar de Pátio": 18,
+      "Estoquista": 19,
+      "Mecânico": 9,
+      "Borracheiro": 3
+    },
+    "origens": {
+      "migracao_drive": 50
+    },
+    "comCargoId": 0,
+    "semCargoId": 50
+  }
+}

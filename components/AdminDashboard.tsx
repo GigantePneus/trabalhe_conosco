@@ -13,6 +13,7 @@ import {
 import { analyzeSurveyResponses, analyzeTalentCompatibility, listAvailableGeminiModels, AIAnalysisResult, TalentAnalysisResult, DEFAULT_PROMPT_SURVEYS, DEFAULT_PROMPT_TALENTS } from '../aiService';
 import { createDefaultJobLanding, parseJobLandingFromRequisitos, serializeJobLanding, toLines } from '../jobsService';
 import { filterCandidatosAdmin, getUniqueCargos, normalizeFilterText } from '../services/adminFilterService';
+import { areCargosEquivalent } from '../services/cargoEquivalenceService';
 
 const AdminDashboard: React.FC = () => {
   const [activeTab, setActiveTab] = useState<'overview' | 'talents' | 'surveys' | 'ai' | 'jobs' | 'lojas' | 'acessos' | 'settings'>('overview');
@@ -99,10 +100,11 @@ const AdminDashboard: React.FC = () => {
   const [endDate, setEndDate] = useState('');
   const [searchTerm, setSearchTerm] = useState('');
 
-  // Lista única e normalizada de cargos cadastrados na rede/unidades autorizadas (Prompt 94)
+  // Lista única e normalizada de cargos cadastrados na rede/unidades autorizadas e Banco de Talentos (Prompt 94/95)
   const uniqueCargos = useMemo(() => {
-    return getUniqueCargos(cargos);
-  }, [cargos]);
+    const btCargos = (candidatos || []).map(c => c.vaga_interesse).filter(Boolean) as string[];
+    return getUniqueCargos(cargos, btCargos);
+  }, [cargos, candidatos]);
 
   // Lista filtrada em memória de forma limpa e reativa
   const filteredCandidatos = useMemo(() => {
@@ -1458,10 +1460,11 @@ const AdminDashboard: React.FC = () => {
     );
 
     return candidatos.filter(cand => {
-      // 1. Filtro por Cargo: casa por vaga_interesse ou por cargo_id pertencente ao cargo
+      // 1. Filtro por Cargo: casa por vaga_interesse (com equivalência semântica) ou por cargo_id pertencente ao cargo
       const candTitleNorm = normalizeFilterText(cand.vaga_interesse);
       const matchCargo =
         candTitleNorm === normalizedSelected ||
+        areCargosEquivalent(cand.vaga_interesse, selectedAiCargo) ||
         Boolean(cand.cargo_id && matchingVagaIds.has(cand.cargo_id));
 
       if (!matchCargo) return false;

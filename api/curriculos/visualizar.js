@@ -393,6 +393,9 @@ function normalizeCargoSubfolderName(rawTitle) {
   if (/recep|atendent/i.test(lower)) {
     return "Recepcionista";
   }
+  if (/borrach/i.test(lower)) {
+    return "Borracheiro";
+  }
   return clean.replace(/[/\\?%*:|"<>]/g, " - ").replace(/\s+/g, " ").trim();
 }
 var GoogleDriveOAuthAdapter = class {
