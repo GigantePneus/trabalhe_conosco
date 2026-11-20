@@ -500,26 +500,28 @@ export async function handleVerificarDuplicidade(
   const vistos = new Set<string>();
 
   try {
-    // 1. Busca por e-mail exato (normalizado)
+    // 1. Busca por e-mail exato (normalizado) — IGNORA 'naotem@naotem.com' como identificador único
     if (params.email && params.email.trim()) {
       const cleanEmail = params.email.trim().toLowerCase();
-      const { data: rowsEmail } = await adminClient
-        .from('candidatos')
-        .select('id, nome, email, telefone, cpf_mascarado')
-        .ilike('email', cleanEmail);
+      if (cleanEmail !== 'naotem@naotem.com') {
+        const { data: rowsEmail } = await adminClient
+          .from('candidatos')
+          .select('id, nome, email, telefone, cpf_mascarado')
+          .ilike('email', cleanEmail);
 
-      for (const r of rowsEmail || []) {
-        if (!vistos.has(r.id)) {
-          vistos.add(r.id);
-          correspondencias.push({
-            candidato_id: r.id,
-            nome: r.nome,
-            email: r.email,
-            telefone: r.telefone,
-            cpf_mascarado: r.cpf_mascarado,
-            tipo_correspondencia: 'email_exato',
-            score_confianca: 'alto'
-          });
+        for (const r of rowsEmail || []) {
+          if (!vistos.has(r.id)) {
+            vistos.add(r.id);
+            correspondencias.push({
+              candidato_id: r.id,
+              nome: r.nome,
+              email: r.email,
+              telefone: r.telefone,
+              cpf_mascarado: r.cpf_mascarado,
+              tipo_correspondencia: 'email_exato',
+              score_confianca: 'alto'
+            });
+          }
         }
       }
     }
@@ -655,7 +657,8 @@ export async function handleCriarCandidato(
     return { statusCode: 400, data: { success: false, error: 'E-mail válido é obrigatório.' } };
   }
 
-  if (!payload.telefone || payload.telefone.trim().length < 8) {
+  const isMigracao = payload.origem === 'migracao_drive';
+  if (!isMigracao && (!payload.telefone || payload.telefone.trim().length < 8)) {
     return { statusCode: 400, data: { success: false, error: 'Telefone de contato é obrigatório.' } };
   }
 
@@ -663,24 +666,26 @@ export async function handleCriarCandidato(
   const cleanEmail = payload.email.trim().toLowerCase();
 
   try {
-    // 1. Idempotência / Prevenção de duplicidade por e-mail
-    const { data: candExistente } = await adminClient
-      .from('candidatos')
-      .select('id, nome, email, telefone, cpf_mascarado, criado_em')
-      .eq('email', cleanEmail)
-      .maybeSingle();
+    // 1. Idempotência / Prevenção de duplicidade por e-mail (IGNORA 'naotem@naotem.com')
+    if (cleanEmail !== 'naotem@naotem.com') {
+      const { data: candExistente } = await adminClient
+        .from('candidatos')
+        .select('id, nome, email, telefone, cpf_mascarado, criado_em')
+        .eq('email', cleanEmail)
+        .maybeSingle();
 
-    if (candExistente) {
-      return {
-        statusCode: 200,
-        data: {
-          success: true,
-          ja_existente: true,
-          candidato_id: candExistente.id,
-          mensagem: 'Candidato já cadastrado com este e-mail. Registro reaproveitado com sucesso.',
-          candidato: candExistente
-        }
-      };
+      if (candExistente) {
+        return {
+          statusCode: 200,
+          data: {
+            success: true,
+            ja_existente: true,
+            candidato_id: candExistente.id,
+            mensagem: 'Candidato já cadastrado com este e-mail. Registro reaproveitado com sucesso.',
+            candidato: candExistente
+          }
+        };
+      }
     }
 
     // 2. Tratamento seguro de CPF
@@ -719,9 +724,11 @@ export async function handleCriarCandidato(
       }
     } else {
       // Quando não há CPF (migração de currículos antigos):
-      // Gera hash único e determinístico baseado no e-mail para cumprir NOT NULL UNIQUE sem violar integridade
-      // e registra no banco como 'CPF Pendente' (respeitando o limite VARCHAR(14) da coluna)
-      cpfHash = crypto.createHash('sha256').update(`MIGRACAO_${cleanEmail}`).digest('hex');
+      // Gera hash único e determinístico sem colidir múltiplos 'naotem@naotem.com'
+      const seed = cleanEmail === 'naotem@naotem.com'
+        ? `MIGRACAO_${payload.nome.trim().toLowerCase()}_${payload.telefone || crypto.randomUUID()}`
+        : `MIGRACAO_${cleanEmail}`;
+      cpfHash = crypto.createHash('sha256').update(seed).digest('hex');
       cpfMascarado = 'CPF Pendente';
       cpfCriptografado = null;
     }
@@ -735,7 +742,7 @@ export async function handleCriarCandidato(
         cpf_hash: cpfHash,
         cpf_mascarado: cpfMascarado,
         cpf_criptografado: cpfCriptografado,
-        telefone: payload.telefone.trim(),
+        telefone: payload.telefone ? payload.telefone.trim() : null,
         cidade: payload.cidade?.trim() || null,
         estado: payload.estado?.trim().toUpperCase() || null,
         escolaridade: payload.escolaridade?.trim() || null,

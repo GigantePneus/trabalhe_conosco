@@ -2116,19 +2116,21 @@ async function handleVerificarDuplicidade(params, token) {
   try {
     if (params.email && params.email.trim()) {
       const cleanEmail = params.email.trim().toLowerCase();
-      const { data: rowsEmail } = await adminClient.from("candidatos").select("id, nome, email, telefone, cpf_mascarado").ilike("email", cleanEmail);
-      for (const r of rowsEmail || []) {
-        if (!vistos.has(r.id)) {
-          vistos.add(r.id);
-          correspondencias.push({
-            candidato_id: r.id,
-            nome: r.nome,
-            email: r.email,
-            telefone: r.telefone,
-            cpf_mascarado: r.cpf_mascarado,
-            tipo_correspondencia: "email_exato",
-            score_confianca: "alto"
-          });
+      if (cleanEmail !== "naotem@naotem.com") {
+        const { data: rowsEmail } = await adminClient.from("candidatos").select("id, nome, email, telefone, cpf_mascarado").ilike("email", cleanEmail);
+        for (const r of rowsEmail || []) {
+          if (!vistos.has(r.id)) {
+            vistos.add(r.id);
+            correspondencias.push({
+              candidato_id: r.id,
+              nome: r.nome,
+              email: r.email,
+              telefone: r.telefone,
+              cpf_mascarado: r.cpf_mascarado,
+              tipo_correspondencia: "email_exato",
+              score_confianca: "alto"
+            });
+          }
         }
       }
     }
@@ -2219,24 +2221,27 @@ async function handleCriarCandidato(payload, token) {
   if (!payload.email || !payload.email.includes("@")) {
     return { statusCode: 400, data: { success: false, error: "E-mail v\xE1lido \xE9 obrigat\xF3rio." } };
   }
-  if (!payload.telefone || payload.telefone.trim().length < 8) {
+  const isMigracao = payload.origem === "migracao_drive";
+  if (!isMigracao && (!payload.telefone || payload.telefone.trim().length < 8)) {
     return { statusCode: 400, data: { success: false, error: "Telefone de contato \xE9 obrigat\xF3rio." } };
   }
   const adminClient = getSupabaseAdmin();
   const cleanEmail = payload.email.trim().toLowerCase();
   try {
-    const { data: candExistente } = await adminClient.from("candidatos").select("id, nome, email, telefone, cpf_mascarado, criado_em").eq("email", cleanEmail).maybeSingle();
-    if (candExistente) {
-      return {
-        statusCode: 200,
-        data: {
-          success: true,
-          ja_existente: true,
-          candidato_id: candExistente.id,
-          mensagem: "Candidato j\xE1 cadastrado com este e-mail. Registro reaproveitado com sucesso.",
-          candidato: candExistente
-        }
-      };
+    if (cleanEmail !== "naotem@naotem.com") {
+      const { data: candExistente } = await adminClient.from("candidatos").select("id, nome, email, telefone, cpf_mascarado, criado_em").eq("email", cleanEmail).maybeSingle();
+      if (candExistente) {
+        return {
+          statusCode: 200,
+          data: {
+            success: true,
+            ja_existente: true,
+            candidato_id: candExistente.id,
+            mensagem: "Candidato j\xE1 cadastrado com este e-mail. Registro reaproveitado com sucesso.",
+            candidato: candExistente
+          }
+        };
+      }
     }
     let cpfHash;
     let cpfMascarado;
@@ -2263,7 +2268,8 @@ async function handleCriarCandidato(payload, token) {
         return { statusCode: 400, data: { success: false, error: `CPF inv\xE1lido: ${cpfVal.error}` } };
       }
     } else {
-      cpfHash = crypto5.createHash("sha256").update(`MIGRACAO_${cleanEmail}`).digest("hex");
+      const seed = cleanEmail === "naotem@naotem.com" ? `MIGRACAO_${payload.nome.trim().toLowerCase()}_${payload.telefone || crypto5.randomUUID()}` : `MIGRACAO_${cleanEmail}`;
+      cpfHash = crypto5.createHash("sha256").update(seed).digest("hex");
       cpfMascarado = "CPF Pendente";
       cpfCriptografado = null;
     }
@@ -2273,7 +2279,7 @@ async function handleCriarCandidato(payload, token) {
       cpf_hash: cpfHash,
       cpf_mascarado: cpfMascarado,
       cpf_criptografado: cpfCriptografado,
-      telefone: payload.telefone.trim(),
+      telefone: payload.telefone ? payload.telefone.trim() : null,
       cidade: payload.cidade?.trim() || null,
       estado: payload.estado?.trim().toUpperCase() || null,
       escolaridade: payload.escolaridade?.trim() || null,
