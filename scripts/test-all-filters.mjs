@@ -65,11 +65,11 @@ async function testAllFilters() {
   // 2. Bateria de Testes Estruturados
   const testCases = [
     // Pirituba
-    { lojaId: PIRITUBA_ID, lojaNome: 'Pirituba', cargo: '', esperado: 50, desc: 'Todos os cargos' },
+    { lojaId: PIRITUBA_ID, lojaNome: 'Pirituba', cargo: '', esperado: 53, desc: 'Todos os cargos' },
     { lojaId: PIRITUBA_ID, lojaNome: 'Pirituba', cargo: 'Mecânico Automotivo', esperado: 9, desc: 'Mecânico Automotivo' },
-    { lojaId: PIRITUBA_ID, lojaNome: 'Pirituba', cargo: 'Alinhador Automotivo', esperado: 1, desc: 'Alinhador Automotivo' },
-    { lojaId: PIRITUBA_ID, lojaNome: 'Pirituba', cargo: 'Auxiliar de Pátio / Auxiliar de Mecânico', esperado: 18, desc: 'Auxiliar de Pátio / Auxiliar de Mecânico' },
-    { lojaId: PIRITUBA_ID, lojaNome: 'Pirituba', cargo: 'Estoquista', esperado: 19, desc: 'Estoquista' },
+    { lojaId: PIRITUBA_ID, lojaNome: 'Pirituba', cargo: 'Alinhador Automotivo', esperado: 2, desc: 'Alinhador Automotivo' },
+    { lojaId: PIRITUBA_ID, lojaNome: 'Pirituba', cargo: 'Auxiliar de Pátio / Auxiliar de Mecânico', esperado: 19, desc: 'Auxiliar de Pátio / Auxiliar de Mecânico' },
+    { lojaId: PIRITUBA_ID, lojaNome: 'Pirituba', cargo: 'Estoquista', esperado: 20, desc: 'Estoquista' },
     { lojaId: PIRITUBA_ID, lojaNome: 'Pirituba', cargo: 'Borracheiro', esperado: 3, desc: 'Borracheiro' },
     { lojaId: PIRITUBA_ID, lojaNome: 'Pirituba', cargo: 'espontanea', esperado: 0, desc: 'Candidatura Espontânea (deve ser 0)' },
 

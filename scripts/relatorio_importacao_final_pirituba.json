@@ -1,0 +1,47 @@
+[
+  {
+    "nome": "Renato Muniz dos Santos",
+    "profissaoOriginal": "Almoxarife / Conferente",
+    "cargoCanonico": "Estoquista",
+    "arquivoOriginal": "RENATO MUNIZ DOS SANTOS.pdf",
+    "convertidoPdf": false,
+    "candidatoId": "f5a5318b-f541-4453-a751-b1b1b17083e9",
+    "candidaturaId": "b00099c0-7286-4fed-84d2-25783258e89f",
+    "curriculoId": "9a3a801b-7934-491c-8557-5dee18bae288",
+    "driveFileId": "curriculo_139e9e1b86725704d94c4d810d621961.pdf",
+    "visualizacaoStatus": 200,
+    "visualizacaoBytes": 129356,
+    "visualizacaoMime": "application/pdf",
+    "visualizacaoSucesso": true
+  },
+  {
+    "nome": "Ricardo Leite de Barros",
+    "profissaoOriginal": "Alinhador e Mecânico de Suspensão",
+    "cargoCanonico": "Alinhador Automotivo",
+    "arquivoOriginal": "Ricardo.jpeg",
+    "convertidoPdf": true,
+    "candidatoId": "b08e94bf-6663-4eab-83dc-fab5a96ae5a0",
+    "candidaturaId": "8a7cdcf7-5523-49b7-b42e-43a513f03d91",
+    "curriculoId": "feef3563-a09f-4484-a5b1-396ca0d701d5",
+    "driveFileId": "curriculo_0e815cae9d28624ac933cfc241402abc.pdf",
+    "visualizacaoStatus": 200,
+    "visualizacaoBytes": 98505,
+    "visualizacaoMime": "application/pdf",
+    "visualizacaoSucesso": true
+  },
+  {
+    "nome": "Zeus Carlos de Sá",
+    "profissaoOriginal": "Auxiliar de Mecânico Automotivo",
+    "cargoCanonico": "Auxiliar de Pátio / Auxiliar de Mecânico",
+    "arquivoOriginal": "Zeus Carlos deSá.pdf",
+    "convertidoPdf": false,
+    "candidatoId": "7ac46019-b64f-4c84-9793-1b8c35916abf",
+    "candidaturaId": "59a999a8-78bc-4c06-9399-55c91f6b9391",
+    "curriculoId": "ef1cbb32-5c90-45db-8ec0-4442825ada2d",
+    "driveFileId": "curriculo_3a0ae571fa36cb43c95710f9ec03c9fe.pdf",
+    "visualizacaoStatus": 200,
+    "visualizacaoBytes": 1363943,
+    "visualizacaoMime": "application/pdf",
+    "visualizacaoSucesso": true
+  }
+]
