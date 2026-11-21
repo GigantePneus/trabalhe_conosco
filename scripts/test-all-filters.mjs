@@ -10,6 +10,7 @@ const PIRITUBA_ID = 'a5486659-5d74-4bf8-9d0d-55032376198a';
 const GOIANIA_1_ID = '5cfb824e-7031-4ea0-94ae-a464f6332091';
 const GOIANIA_2_ID = '1cbb63f7-0e2f-4042-a56d-245479cfa1b0';
 const JUNDIAI_ID = 'eaacf2ee-4bdb-4b0a-ae4a-474389330175';
+const RIO_VERDE_ID = '8e875780-e672-4c0a-91d6-c91651d888b8';
 
 async function testAllFilters() {
   console.log('=== TESTE DE HOMOLOGAÇÃO DOS FILTROS DO BANCO DE TALENTOS ===\n');
@@ -87,10 +88,19 @@ async function testAllFilters() {
     { lojaId: GOIANIA_2_ID, lojaNome: 'Goiânia 2', cargo: 'Consultor de Vendas', esperado: 16, desc: 'Consultor de Vendas' },
     { lojaId: GOIANIA_2_ID, lojaNome: 'Goiânia 2', cargo: 'espontanea', esperado: 0, desc: 'Candidatura Espontânea (deve ser 0)' },
 
-    // Jundiaí
-    { lojaId: JUNDIAI_ID, lojaNome: 'Jundiaí', cargo: '', esperado: 5, desc: 'Todos os cargos' },
+    // Rio Verde (Migração Concluída)
+    { lojaId: RIO_VERDE_ID, lojaNome: 'Rio Verde', cargo: '', esperado: 46, desc: 'Todos os cargos' },
+    { lojaId: RIO_VERDE_ID, lojaNome: 'Rio Verde', cargo: 'Consultor de Vendas', esperado: 20, desc: 'Consultor de Vendas' },
+    { lojaId: RIO_VERDE_ID, lojaNome: 'Rio Verde', cargo: 'Recepcionista de Centro Automotivo', esperado: 21, desc: 'Recepcionista de Centro Automotivo' },
+    { lojaId: RIO_VERDE_ID, lojaNome: 'Rio Verde', cargo: 'Estoquista', esperado: 2, desc: 'Estoquista' },
+    { lojaId: RIO_VERDE_ID, lojaNome: 'Rio Verde', cargo: 'Mecânico Automotivo', esperado: 2, desc: 'Mecânico Automotivo' },
+    { lojaId: RIO_VERDE_ID, lojaNome: 'Rio Verde', cargo: 'Alinhador Automotivo', esperado: 1, desc: 'Alinhador Automotivo' },
+
+    // Jundiaí (4 reais, 1 teste auditado)
+    { lojaId: JUNDIAI_ID, lojaNome: 'Jundiaí', cargo: '', esperado: 4, desc: 'Todos os cargos reais (teste oculto)' },
     { lojaId: JUNDIAI_ID, lojaNome: 'Jundiaí', cargo: 'Mecânico Automotivo', esperado: 4, desc: 'Mecânico Automotivo' },
-    { lojaId: JUNDIAI_ID, lojaNome: 'Jundiaí', cargo: 'Consultor de Vendas', esperado: 1, desc: 'Consultor de Vendas' }
+    { lojaId: JUNDIAI_ID, lojaNome: 'Jundiaí', cargo: '', esperado: 5, includeTest: true, desc: 'Todos os cargos com teste auditado' },
+    { lojaId: JUNDIAI_ID, lojaNome: 'Jundiaí', cargo: 'Consultor de Vendas', esperado: 1, includeTest: true, desc: 'Consultor de Vendas (teste Mariana)' }
   ];
 
   let passed = 0;
@@ -100,7 +110,8 @@ async function testAllFilters() {
     const res = filterCandidatosAdmin(items, {
       lojaId: tc.lojaId,
       cargoId: tc.cargo,
-      cargosList: cargosRes || []
+      cargosList: cargosRes || [],
+      includeTestRecords: tc.includeTest ?? false
     });
 
     const isOk = res.length === tc.esperado;

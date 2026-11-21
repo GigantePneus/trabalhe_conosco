@@ -9,6 +9,72 @@ import {
   toCanonicalCargo,
   normalizeCargoText
 } from './cargoEquivalenceService';
+import type { KPIStats } from '../types';
+
+/**
+ * Identificadores explicitamente auditados de registros sintéticos de teste.
+ * Não utiliza apenas domínio de e-mail como critério de exclusão.
+ */
+export const AUDITED_TEST_CANDIDATO_IDS = new Set<string>([
+  'e87b3b8a-d313-4f06-997f-0f8dc5e3bbc1' // Mariana Costa Ferreira (candidatos.id)
+]);
+
+export const AUDITED_TEST_CANDIDATURA_IDS = new Set<string>([
+  '7c1f8b79-feae-46a3-b6ef-6d07bdf46de9' // Candidatura de teste Jundiaí (candidaturas.id)
+]);
+
+export const AUDITED_TEST_PROTOCOLS = new Set<string>([
+  'GIG-20261113-522288'
+]);
+
+/**
+ * Verifica se um item corresponde a um registro sintético de teste.
+ */
+export function isItemRegistroTeste(item: any): boolean {
+  if (!item) return false;
+  if (item.candidato_id && AUDITED_TEST_CANDIDATO_IDS.has(item.candidato_id)) return true;
+  if (item.id && AUDITED_TEST_CANDIDATO_IDS.has(item.id)) return true;
+  if (item.candidatura_id && AUDITED_TEST_CANDIDATURA_IDS.has(item.candidatura_id)) return true;
+  if (item.protocolo && AUDITED_TEST_PROTOCOLS.has(item.protocolo)) return true;
+  if (item.dados_extras?.protocolo && AUDITED_TEST_PROTOCOLS.has(item.dados_extras.protocolo)) return true;
+  if (item.dados_extras?.is_teste === true || item.dados_formulario?.is_teste === true) return true;
+  if (item.is_teste === true) return true;
+  return false;
+}
+
+/**
+ * Normaliza o município e estado de residência do candidato, evitando duplicações
+ * anômalas de UF (como "Goiânia - GO - GO") e padronizando formato "Cidade - UF".
+ */
+export function normalizeCidadeResidencia(cidadeRaw?: string, estadoRaw?: string): string {
+  if (!cidadeRaw || !cidadeRaw.trim()) return 'Não informada';
+  let c = cidadeRaw.trim();
+  let e = (estadoRaw || '').trim().toUpperCase();
+
+  // Se a cidade já termina com '- UF' ou '/ UF' (ex: 'Goiânia - GO' ou 'Goiânia/GO')
+  const matchUf = c.match(/(?:[\s\-\/]+)([A-Z]{2})$/i);
+  if (matchUf) {
+    const ufInCity = matchUf[1].toUpperCase();
+    c = c.slice(0, matchUf.index).trim();
+    if (!e) e = ufInCity;
+  }
+
+  // Remove qualquer traço ou barra solta no final
+  c = c.replace(/[\-\/]+$/, '').trim();
+
+  // Limpa se ainda restou algo como 'Goiânia - GO'
+  const secondCheck = c.match(/(?:[\s\-\/]+)([A-Z]{2})$/i);
+  if (secondCheck) {
+    const ufInCity2 = secondCheck[1].toUpperCase();
+    c = c.slice(0, secondCheck.index).trim();
+    if (!e) e = ufInCity2;
+  }
+
+  if (e && e.length === 2) {
+    return `${c} - ${e}`;
+  }
+  return c;
+}
 
 export interface CandidatoAdminItem {
   id: string;
@@ -48,6 +114,7 @@ export interface AdminFilters {
   endDate?: string; // YYYY-MM-DD
   searchTerm?: string;
   cargosList?: Array<{ id: string; titulo?: string; nome?: string; [key: string]: any }>;
+  includeTestRecords?: boolean;
 }
 
 export interface UniqueCargoOption {
@@ -189,6 +256,11 @@ export function filterCandidatosAdmin(
   }
 
   return items.filter(item => {
+    // 0. Filtro de Registros Sintéticos de Teste (ocultos por padrão, preservados para auditoria)
+    if (!filters.includeTestRecords && isItemRegistroTeste(item)) {
+      return false;
+    }
+
     // 1. Filtro Estruturado por Unidade Franqueada (loja_id)
     if (lojaId && lojaId.trim() !== '') {
       if (!item.loja_id || item.loja_id !== lojaId) {
@@ -298,4 +370,98 @@ export function filterCandidatosAdmin(
 
     return true;
   });
+}
+
+/**
+ * Calcula os indicadores e gráficos do Dashboard Administrativo
+ * de forma puramente reativa e precisa a partir da lista de itens filtrados.
+ */
+export function calculateDashboardStats(items: CandidatoAdminItem[]): {
+  stats: KPIStats;
+  timelineData: { date: string; count: number; fullDate: Date }[];
+  heatmapData: number[];
+} {
+  const uniqueCandidatosSet = new Set<string>();
+  const uniqueCandidaturasSet = new Set<string>();
+  const uniqueLojasSet = new Set<string>();
+  let bancoTalentosCount = 0;
+
+  const porLoja: Record<string, number> = {};
+  const porCidade: Record<string, number> = {};
+  const porCargo: Record<string, number> = {};
+  const porDia: Record<string, number> = {};
+  const tMap: Record<string, { count: number; dateObj: Date }> = {};
+  const hMap = new Array(24).fill(0);
+
+  (items || []).forEach(cand => {
+    // 1. Candidatos únicos: contagem por candidatos.id
+    const candId = cand.candidato_id || cand.id;
+    if (candId) uniqueCandidatosSet.add(candId);
+
+    // 2. Total de candidaturas: contagem por candidaturas.id
+    const canduraId = cand.candidatura_id || cand.id;
+    if (canduraId) uniqueCandidaturasSet.add(canduraId);
+
+    // 3. Unidades com candidaturas
+    if (cand.loja_id) uniqueLojasSet.add(cand.loja_id);
+
+    // 4. Candidaturas no Banco de Talentos
+    if (cand.status_candidatura === 'Banco de Talentos' || cand.cargo_id === null) {
+      bancoTalentosCount++;
+    }
+
+    // Gráfico 1: Candidaturas por Unidade (agrupando por loja_id e exibindo loja_nome)
+    const nomeLoja = cand.loja_nome || 'Unidade Geral / Matriz';
+    porLoja[nomeLoja] = (porLoja[nomeLoja] || 0) + 1;
+
+    // Gráfico 2: Residência dos Candidatos (normalizada sem duplicações de UF)
+    const rawCidade = cand.candidato_cidade || cand.cidade;
+    const rawEstado = cand.candidato_estado || cand.estado;
+    const cidadeNorm = normalizeCidadeResidencia(rawCidade, rawEstado);
+    porCidade[cidadeNorm] = (porCidade[cidadeNorm] || 0) + 1;
+
+    // Gráfico 3: Distribuição por Vaga
+    const cargoNome = cand.vaga_interesse || 'Geral';
+    porCargo[cargoNome] = (porCargo[cargoNome] || 0) + 1;
+
+    // Timeline e Heatmap
+    if (cand.created_at) {
+      const d = new Date(cand.created_at);
+      if (!isNaN(d.getTime())) {
+        const diaStr = d.toLocaleDateString('pt-BR');
+        porDia[diaStr] = (porDia[diaStr] || 0) + 1;
+
+        const key = `${d.getDate().toString().padStart(2, '0')}/${(d.getMonth() + 1).toString().padStart(2, '0')}`;
+        if (!tMap[key]) tMap[key] = { count: 0, dateObj: new Date(d.getFullYear(), d.getMonth(), d.getDate()) };
+        tMap[key].count++;
+
+        const hour = d.getHours();
+        if (hour >= 0 && hour < 24) {
+          hMap[hour]++;
+        }
+      }
+    }
+  });
+
+  const sortedTimeline = Object.keys(tMap).map(k => ({
+    date: k,
+    count: tMap[k].count,
+    fullDate: tMap[k].dateObj
+  })).sort((a, b) => a.fullDate.getTime() - b.fullDate.getTime());
+
+  return {
+    stats: {
+      total: uniqueCandidaturasSet.size || (items || []).length,
+      totalCandidatosUnicos: uniqueCandidatosSet.size,
+      totalCandidaturas: uniqueCandidaturasSet.size || (items || []).length,
+      unidadesComCandidaturas: uniqueLojasSet.size,
+      bancoTalentosTotal: bancoTalentosCount,
+      porLoja,
+      porCidade,
+      porCargo,
+      porDia
+    },
+    timelineData: sortedTimeline,
+    heatmapData: hMap
+  };
 }

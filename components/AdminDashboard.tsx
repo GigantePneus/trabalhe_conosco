@@ -12,7 +12,14 @@ import {
 } from 'lucide-react';
 import { analyzeSurveyResponses, analyzeTalentCompatibility, listAvailableGeminiModels, AIAnalysisResult, TalentAnalysisResult, DEFAULT_PROMPT_SURVEYS, DEFAULT_PROMPT_TALENTS } from '../aiService';
 import { createDefaultJobLanding, parseJobLandingFromRequisitos, serializeJobLanding, toLines } from '../jobsService';
-import { filterCandidatosAdmin, getUniqueCargos, normalizeFilterText } from '../services/adminFilterService';
+import {
+  filterCandidatosAdmin,
+  getUniqueCargos,
+  normalizeFilterText,
+  normalizeCidadeResidencia,
+  calculateDashboardStats,
+  isItemRegistroTeste
+} from '../services/adminFilterService';
 import { areCargosEquivalent } from '../services/cargoEquivalenceService';
 
 const AdminDashboard: React.FC = () => {
@@ -90,7 +97,7 @@ const AdminDashboard: React.FC = () => {
   const [cargos, setCargos] = useState<ConfigItem[]>([]);
   const [loading, setLoading] = useState(true);
 
-  // Filtros Estruturados do Banco de Talentos (Prompt 65 / Prompt 94)
+  // Filtros Estruturados do Banco de Talentos e Visão Geral
   const [filterLojaId, setFilterLojaId] = useState('');
   const [filterCargoId, setFilterCargoId] = useState('');
   const [filterStatus, setFilterStatus] = useState('');
@@ -99,6 +106,7 @@ const AdminDashboard: React.FC = () => {
   const [startDate, setStartDate] = useState('');
   const [endDate, setEndDate] = useState('');
   const [searchTerm, setSearchTerm] = useState('');
+  const [includeTestRecords, setIncludeTestRecords] = useState(false);
 
   // Lista única e normalizada de cargos cadastrados na rede/unidades autorizadas e Banco de Talentos (Prompt 94/95)
   const uniqueCargos = useMemo(() => {
@@ -106,7 +114,7 @@ const AdminDashboard: React.FC = () => {
     return getUniqueCargos(cargos, btCargos);
   }, [cargos, candidatos]);
 
-  // Lista filtrada em memória de forma limpa e reativa
+  // Lista filtrada em memória de forma limpa e reativa para o Banco de Talentos
   const filteredCandidatos = useMemo(() => {
     return filterCandidatosAdmin(candidatos as any, {
       lojaId: filterLojaId,
@@ -117,9 +125,28 @@ const AdminDashboard: React.FC = () => {
       startDate,
       endDate,
       searchTerm,
-      cargosList: cargos
+      cargosList: cargos,
+      includeTestRecords
     }) as Candidato[];
-  }, [candidatos, filterLojaId, filterCargoId, filterCity, filterEstado, filterStatus, startDate, endDate, searchTerm, cargos]);
+  }, [candidatos, filterLojaId, filterCargoId, filterCity, filterEstado, filterStatus, startDate, endDate, searchTerm, cargos, includeTestRecords]);
+
+  // Lista filtrada em memória para a Visão Geral (responde reativamente a Loja, Cargo, Status, Período e Testes)
+  const overviewFilteredCandidatos = useMemo(() => {
+    return filterCandidatosAdmin(candidatos as any, {
+      lojaId: filterLojaId,
+      cargoId: filterCargoId,
+      status: filterStatus,
+      startDate,
+      endDate,
+      cargosList: cargos,
+      includeTestRecords
+    }) as Candidato[];
+  }, [candidatos, filterLojaId, filterCargoId, filterStatus, startDate, endDate, cargos, includeTestRecords]);
+
+  // Estatísticas e gráficos executivos reativos da Visão Geral
+  const { stats, timelineData, heatmapData } = useMemo(() => {
+    return calculateDashboardStats(overviewFilteredCandidatos as any);
+  }, [overviewFilteredCandidatos]);
 
   const clearAllFilters = () => {
     if (isFranqueadoOrGerente && userAuthorizedLojas.length === 1) {
@@ -134,10 +161,11 @@ const AdminDashboard: React.FC = () => {
     setStartDate('');
     setEndDate('');
     setSearchTerm('');
+    setIncludeTestRecords(false);
   };
 
   const hasActiveFilters = Boolean(
-    filterLojaId || filterCargoId || filterStatus || filterCity || filterEstado || startDate || endDate || searchTerm
+    filterLojaId || filterCargoId || filterStatus || filterCity || filterEstado || startDate || endDate || searchTerm || includeTestRecords
   );
 
   const [selectedResume, setSelectedResume] = useState<Candidato | null>(null);
@@ -233,12 +261,6 @@ const AdminDashboard: React.FC = () => {
       window.removeEventListener('resize', updateTableScrollMetrics);
     };
   }, [activeTab, filteredCandidatos.length, updateTableScrollMetrics]);
-
-  const [stats, setStats] = useState<KPIStats>({ total: 0, porCidade: {}, porCargo: {}, porDia: {} });
-  
-  // Dados extras para os novos gráficos
-  const [timelineData, setTimelineData] = useState<{date: string, count: number, fullDate: Date}[]>([]);
-  const [heatmapData, setHeatmapData] = useState<number[]>(new Array(24).fill(0));
 
   const [newItem, setNewItem] = useState('');
   const [jobEditorOpen, setJobEditorOpen] = useState(false);
@@ -568,9 +590,6 @@ const AdminDashboard: React.FC = () => {
       setLojasList([]);
       setCargos([]);
       setCidades([]);
-      setStats({ total: 0, porCidade: {}, porCargo: {}, porDia: {} });
-      setTimelineData([]);
-      setHeatmapData(new Array(24).fill(0));
       setLoading(false);
       return;
     }
@@ -639,9 +658,7 @@ const AdminDashboard: React.FC = () => {
 
         const rawCandCidade = (cand.cidade || row.dados_formulario?.cidade || '').trim();
         const rawCandEstado = (cand.estado || row.dados_formulario?.estado || '').trim().toUpperCase();
-        const cidadeResidencia = rawCandCidade
-          ? `${rawCandCidade}${rawCandEstado ? ' - ' + rawCandEstado : ''}`
-          : 'Não informada';
+        const cidadeResidencia = normalizeCidadeResidencia(rawCandCidade, rawCandEstado);
 
         const unidadePretendida = (loja.nome || '').trim() || 'Banco de Talentos Corporativo';
 
@@ -655,7 +672,8 @@ const AdminDashboard: React.FC = () => {
         const protocolo = row.dados_extras?.protocolo || row.dados_formulario?.protocolo || '';
 
         return {
-          id: cand.id || row.id,
+          id: row.id,
+          candidato_id: cand.id || row.candidato_id || row.id,
           candidatura_id: row.id,
           cargo_id: row.cargo_id || null,
           nome: cand.nome || 'Candidato',
@@ -688,6 +706,7 @@ const AdminDashboard: React.FC = () => {
             ? `/api/curriculos/visualizar?id=${curriculoId}`
             : (curriculoFileId ? `/api/curriculos/visualizar?fileId=${curriculoFileId}` : ''),
           dados_formulario: row.dados_formulario || {},
+          dados_extras: row.dados_extras || {},
           created_at: row.criado_em || cand.criado_em || new Date().toISOString()
         } as Candidato;
       });
@@ -782,39 +801,6 @@ const AdminDashboard: React.FC = () => {
       console.warn('Erro ao carregar lojas ou cargos no AdminDashboard:', e);
     }
 
-    // Cálculo dos KPIs com os dados consolidados
-    const s: KPIStats = { total: flatCandidatos.length, porCidade: {}, porCargo: {}, porDia: {} };
-    const tMap: Record<string, { count: number; dateObj: Date }> = {};
-    const hMap = new Array(24).fill(0);
-
-    flatCandidatos.forEach(cand => {
-      s.porCidade[cand.cidade] = (s.porCidade[cand.cidade] || 0) + 1;
-      s.porCargo[cand.vaga_interesse] = (s.porCargo[cand.vaga_interesse] || 0) + 1;
-
-      const d = new Date(cand.created_at);
-      const diaStr = d.toLocaleDateString('pt-BR');
-      s.porDia[diaStr] = (s.porDia[diaStr] || 0) + 1;
-
-      const key = `${d.getDate().toString().padStart(2, '0')}/${(d.getMonth() + 1).toString().padStart(2, '0')}`;
-      if (!tMap[key]) tMap[key] = { count: 0, dateObj: new Date(d.getFullYear(), d.getMonth(), d.getDate()) };
-      tMap[key].count++;
-
-      const hour = d.getHours();
-      if (hour >= 0 && hour < 24) {
-        hMap[hour]++;
-      }
-    });
-
-    setStats(s);
-
-    const sortedTimeline = Object.keys(tMap).map(k => ({
-      date: k,
-      count: tMap[k].count,
-      fullDate: tMap[k].dateObj
-    })).sort((a, b) => a.fullDate.getTime() - b.fullDate.getTime());
-
-    setTimelineData(sortedTimeline);
-    setHeatmapData(hMap);
     setLoading(false);
   };
 
@@ -1762,55 +1748,215 @@ const AdminDashboard: React.FC = () => {
           {activeTab === 'overview' && (
             <div className="space-y-8 animate-in fade-in duration-500">
               
-              {/* Barra de Filtros de Data */}
-              <div className="flex flex-col md:flex-row items-center justify-between gap-4 bg-white dark:bg-gray-900 p-6 rounded-[2rem] border border-gray-100 dark:border-gray-800 shadow-lg">
-                <div className="flex items-center gap-3">
-                   <Calendar className="h-6 w-6 text-red-600" />
-                   <h3 className="font-black text-gray-900 dark:text-white uppercase tracking-tight">Filtro de Período</h3>
+              {/* Barra de Filtros Reativos da Visão Geral */}
+              <div className="bg-white dark:bg-gray-900 p-5 sm:p-6 rounded-[2rem] border border-gray-100 dark:border-gray-800 shadow-lg space-y-4">
+                <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 pb-3 border-b border-gray-100 dark:border-gray-800">
+                  <div className="flex items-center gap-3">
+                    <div className="p-2 bg-red-100 dark:bg-red-950/50 text-red-600 rounded-xl">
+                      <BarChart3 className="h-5 w-5" />
+                    </div>
+                    <div>
+                      <h3 className="font-black text-sm text-gray-900 dark:text-white uppercase tracking-tight">Filtros da Visão Geral</h3>
+                      <p className="text-[11px] text-gray-500 font-semibold">Os indicadores executivos, gráficos e mapa de calor respondem dinamicamente aos filtros aplicados.</p>
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-2 self-end sm:self-auto">
+                    <span className="text-xs font-black uppercase text-gray-500 dark:text-gray-400">
+                      {overviewFilteredCandidatos.length} {overviewFilteredCandidatos.length === 1 ? 'Candidatura' : 'Candidaturas'}
+                    </span>
+                    {hasActiveFilters && (
+                      <button
+                        onClick={clearAllFilters}
+                        className="text-[10px] bg-red-100 dark:bg-red-950/60 text-red-600 dark:text-red-400 px-3 py-1.5 rounded-xl uppercase font-black hover:bg-red-200 dark:hover:bg-red-900/50 transition-colors inline-flex items-center gap-1.5"
+                      >
+                        <X className="h-3 w-3" /> Limpar Filtros
+                      </button>
+                    )}
+                  </div>
                 </div>
-                <div className="flex items-center gap-3">
-                  <input 
-                    type="date" 
-                    value={startDate}
-                    onChange={(e) => setStartDate(e.target.value)}
-                    className="px-4 py-2 bg-gray-50 dark:bg-gray-800 rounded-xl border-none text-sm font-bold text-gray-600 dark:text-gray-300 outline-none focus:ring-2 focus:ring-red-600"
-                  />
-                  <span className="text-gray-400 font-bold uppercase text-[10px]">até</span>
-                  <input 
-                    type="date" 
-                    value={endDate}
-                    onChange={(e) => setEndDate(e.target.value)}
-                    className="px-4 py-2 bg-gray-50 dark:bg-gray-800 rounded-xl border-none text-sm font-bold text-gray-600 dark:text-gray-300 outline-none focus:ring-2 focus:ring-red-600"
-                  />
-                  {(startDate || endDate) && (
-                    <button onClick={() => {setStartDate(''); setEndDate('');}} className="ml-2 text-[10px] bg-red-100 text-red-600 px-3 py-2 rounded-xl uppercase font-black hover:bg-red-200">
-                      Limpar
-                    </button>
+
+                {/* Grid de Controles de Filtros */}
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
+                  {/* Filtro 1: Unidade Franqueada (Multi-tenant seguro) */}
+                  <div>
+                    <label className="block text-[10px] font-black uppercase tracking-wider text-gray-400 mb-1">Unidade</label>
+                    <select
+                      className="w-full px-3.5 py-2.5 bg-gray-50 dark:bg-gray-800 border-none rounded-xl text-xs font-bold text-gray-700 dark:text-gray-300 outline-none focus:ring-2 focus:ring-red-600 truncate"
+                      value={filterLojaId}
+                      onChange={e => setFilterLojaId(e.target.value)}
+                      disabled={isFranqueadoOrGerente && userAuthorizedLojas.length === 1}
+                    >
+                      {isFranqueadoOrGerente ? (
+                        userAuthorizedLojas.length === 1 ? (
+                          <option value={userAuthorizedLojas[0].id}>
+                            {userAuthorizedLojas[0].nome} ({userAuthorizedLojas[0].cidade}/{userAuthorizedLojas[0].estado})
+                          </option>
+                        ) : (
+                          <>
+                            <option value="">Todas as Minhas Unidades ({userAuthorizedLojas.length})</option>
+                            {userAuthorizedLojas.map(l => (
+                              <option key={l.id} value={l.id}>
+                                {l.nome} ({l.cidade}/{l.estado})
+                              </option>
+                            ))}
+                          </>
+                        )
+                      ) : (
+                        <>
+                          <option value="">Todas as Unidades da Rede ({lojasList.length})</option>
+                          {lojasList.map(l => (
+                            <option key={l.id} value={l.id}>
+                              {l.nome} ({l.cidade}/{l.estado})
+                            </option>
+                          ))}
+                        </>
+                      )}
+                    </select>
+                  </div>
+
+                  {/* Filtro 2: Cargo / Vaga */}
+                  <div>
+                    <label className="block text-[10px] font-black uppercase tracking-wider text-gray-400 mb-1">Cargo / Vaga</label>
+                    <select
+                      className="w-full px-3.5 py-2.5 bg-gray-50 dark:bg-gray-800 border-none rounded-xl text-xs font-bold text-gray-700 dark:text-gray-300 outline-none focus:ring-2 focus:ring-red-600 truncate"
+                      value={filterCargoId}
+                      onChange={e => setFilterCargoId(e.target.value)}
+                    >
+                      <option value="">Todas as Vagas</option>
+                      <option value="espontanea">★ Candidatura Espontânea</option>
+                      {uniqueCargos.map(c => (
+                        <option key={c.normalizedTitulo} value={c.titulo}>
+                          {c.titulo}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+
+                  {/* Filtro 3: Status */}
+                  <div>
+                    <label className="block text-[10px] font-black uppercase tracking-wider text-gray-400 mb-1">Status</label>
+                    <select
+                      className="w-full px-3.5 py-2.5 bg-gray-50 dark:bg-gray-800 border-none rounded-xl text-xs font-bold text-gray-700 dark:text-gray-300 outline-none focus:ring-2 focus:ring-red-600 truncate"
+                      value={filterStatus}
+                      onChange={e => setFilterStatus(e.target.value)}
+                    >
+                      <option value="">Todos os Status</option>
+                      <option value="Banco de Talentos">Banco de Talentos</option>
+                      <option value="Recebido">Recebido</option>
+                      <option value="Em Triagem">Em Triagem</option>
+                      <option value="Entrevista Agendada">Entrevista Agendada</option>
+                      <option value="Aprovado">Aprovado</option>
+                      <option value="Reprovado">Reprovado</option>
+                      <option value="Desistente">Desistente</option>
+                    </select>
+                  </div>
+
+                  {/* Filtro 4: Período */}
+                  <div>
+                    <label className="block text-[10px] font-black uppercase tracking-wider text-gray-400 mb-1">Período</label>
+                    <div className="flex items-center gap-1.5">
+                      <input 
+                        type="date" 
+                        value={startDate}
+                        onChange={(e) => setStartDate(e.target.value)}
+                        className="w-1/2 px-2.5 py-2.5 bg-gray-50 dark:bg-gray-800 rounded-xl border-none text-[11px] font-bold text-gray-600 dark:text-gray-300 outline-none focus:ring-2 focus:ring-red-600"
+                        title="Data inicial"
+                      />
+                      <span className="text-gray-400 font-bold uppercase text-[9px]">até</span>
+                      <input 
+                        type="date" 
+                        value={endDate}
+                        onChange={(e) => setEndDate(e.target.value)}
+                        className="w-1/2 px-2.5 py-2.5 bg-gray-50 dark:bg-gray-800 rounded-xl border-none text-[11px] font-bold text-gray-600 dark:text-gray-300 outline-none focus:ring-2 focus:ring-red-600"
+                        title="Data final"
+                      />
+                    </div>
+                  </div>
+                </div>
+
+                {/* Opção de Auditoria de Testes (Requisito 4) */}
+                <div className="flex items-center justify-between pt-2 border-t border-gray-50 dark:border-gray-800/60">
+                  <label className="inline-flex items-center gap-2 cursor-pointer select-none">
+                    <input
+                      type="checkbox"
+                      checked={includeTestRecords}
+                      onChange={e => setIncludeTestRecords(e.target.checked)}
+                      className="rounded text-red-600 focus:ring-red-500 h-4 w-4 bg-gray-50 dark:bg-gray-800 border-gray-300 dark:border-gray-700"
+                    />
+                    <span className="text-xs font-bold text-gray-600 dark:text-gray-400">
+                      Incluir registros sintéticos de teste/simulação (auditados)
+                    </span>
+                  </label>
+                  {!includeTestRecords && (
+                    <span className="text-[10px] font-bold text-gray-400 bg-gray-100 dark:bg-gray-800 px-2 py-0.5 rounded-full">
+                      1 registro sintético oculto por padrão
+                    </span>
                   )}
                 </div>
               </div>
 
-              {/* KPIs */}
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-                <KPICard title="Total de Talentos" value={stats.total} icon={<Users className="text-red-600 h-6 w-6" />} color="teal" />
-                <KPICard title="Dias de Captação" value={Object.keys(stats.porDia).length} icon={<TrendingUp className="text-red-600 h-6 w-6" />} color="teal" />
-                {/* Outros 2 slots vazios ou de estatisticas futuras */}
+              {/* Indicadores Executivos (Requisito 1) */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
+                <KPICard 
+                  title="Candidatos Únicos" 
+                  value={stats.totalCandidatosUnicos ?? 0} 
+                  subtitle="Contagem por cadastro (candidatos.id)"
+                  icon={<Users className="text-red-600 h-6 w-6" />} 
+                  color="red" 
+                />
+                <KPICard 
+                  title="Total de Candidaturas" 
+                  value={stats.totalCandidaturas ?? stats.total} 
+                  subtitle="Inscrições registradas (candidaturas.id)"
+                  icon={<FileText className="text-teal-600 h-6 w-6" />} 
+                  color="teal" 
+                />
+                <KPICard 
+                  title="Unidades Ativas" 
+                  value={stats.unidadesComCandidaturas ?? 0} 
+                  subtitle="Polos com talentos recebidos"
+                  icon={<Building2 className="text-amber-600 h-6 w-6" />} 
+                  color="amber" 
+                />
+                <KPICard 
+                  title="Banco de Talentos" 
+                  value={stats.bancoTalentosTotal ?? 0} 
+                  subtitle="Disponíveis para alocação"
+                  icon={<Briefcase className="text-purple-600 h-6 w-6" />} 
+                  color="purple" 
+                />
               </div>
 
-              {/* Novos Gráficos: Linha e Heatmap */}
+              {/* Gráficos de Linha e Heatmap */}
               <div className="grid grid-cols-1 xl:grid-cols-3 gap-8">
                 <div className="xl:col-span-2">
                   <SVGLineChart data={timelineData} />
                 </div>
                 <div className="xl:col-span-1">
-                  <HeatmapChart data={heatmapData} total={stats.total} />
+                  <HeatmapChart data={heatmapData} total={stats.totalCandidaturas ?? stats.total} />
                 </div>
               </div>
 
-              {/* Distribuição (Barras menores) */}
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
-                <ChartCard title="Distribuição por Cidade" data={stats.porCidade} total={stats.total} />
-                <ChartCard title="Distribuição por Vaga" data={stats.porCargo} total={stats.total} />
+              {/* Distribuições (Requisito 2: Unidades, Residência e Cargos) */}
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
+                <ChartCard 
+                  title="Candidaturas por Unidade" 
+                  data={stats.porLoja || {}} 
+                  total={stats.totalCandidaturas ?? stats.total} 
+                  icon={<Building2 className="h-4 w-4" />} 
+                />
+                <ChartCard 
+                  title="Residência dos Candidatos" 
+                  data={stats.porCidade || {}} 
+                  total={stats.totalCandidaturas ?? stats.total} 
+                  icon={<MapPin className="h-4 w-4" />} 
+                />
+                <ChartCard 
+                  title="Distribuição por Vaga" 
+                  data={stats.porCargo || {}} 
+                  total={stats.totalCandidaturas ?? stats.total} 
+                  icon={<Briefcase className="h-4 w-4" />} 
+                />
               </div>
             </div>
           )}
@@ -1961,6 +2107,26 @@ const AdminDashboard: React.FC = () => {
                       className="w-1/2 min-w-0 px-2.5 py-2.5 bg-gray-50 dark:bg-gray-800 rounded-xl border-none text-[11px] font-bold text-gray-600 dark:text-gray-300 outline-none focus:ring-2 focus:ring-red-600"
                     />
                   </div>
+                </div>
+
+                {/* Opção de Auditoria de Testes no Banco de Talentos */}
+                <div className="flex items-center justify-between pt-2 border-t border-gray-50 dark:border-gray-800/60">
+                  <label className="inline-flex items-center gap-2 cursor-pointer select-none">
+                    <input
+                      type="checkbox"
+                      checked={includeTestRecords}
+                      onChange={e => setIncludeTestRecords(e.target.checked)}
+                      className="rounded text-red-600 focus:ring-red-500 h-4 w-4 bg-gray-50 dark:bg-gray-800 border-gray-300 dark:border-gray-700"
+                    />
+                    <span className="text-xs font-bold text-gray-600 dark:text-gray-400">
+                      Incluir registros sintéticos de teste/simulação (auditados)
+                    </span>
+                  </label>
+                  {!includeTestRecords && (
+                    <span className="text-[10px] font-bold text-gray-400 bg-gray-100 dark:bg-gray-800 px-2 py-0.5 rounded-full">
+                      1 registro sintético oculto por padrão
+                    </span>
+                  )}
                 </div>
               </div>
 
@@ -5295,34 +5461,70 @@ const HeatmapChart = ({ data, total }: { data: number[], total: number }) => {
   );
 };
 
-const KPICard = ({ title, value, icon, color }: any) => (
-  <div className="bg-white dark:bg-gray-900 p-8 rounded-[2rem] border border-gray-100 dark:border-gray-800 shadow-xl hover:translate-y-[-5px] transition-all group">
-    <div className={`bg-${color}-100 dark:bg-${color}-900/30 p-3 rounded-2xl w-fit mb-6 group-hover:rotate-12 transition-transform`}>{icon}</div>
-    <div className="text-4xl font-black text-gray-900 dark:text-white mb-1">{value}</div>
-    <div className="text-[10px] font-black text-gray-400 dark:text-gray-500 uppercase tracking-widest leading-none">{title}</div>
+const KPICard = ({ title, value, icon, color, subtitle }: any) => (
+  <div className="bg-white dark:bg-gray-900 p-6 sm:p-8 rounded-[2rem] border border-gray-100 dark:border-gray-800 shadow-xl hover:translate-y-[-5px] transition-all group">
+    <div className={`p-3 rounded-2xl w-fit mb-4 sm:mb-6 group-hover:rotate-12 transition-transform ${
+      color === 'red' ? 'bg-red-100 dark:bg-red-950/40 text-red-600 dark:text-red-400' :
+      color === 'teal' ? 'bg-teal-100 dark:bg-teal-950/40 text-teal-600 dark:text-teal-400' :
+      color === 'amber' ? 'bg-amber-100 dark:bg-amber-950/40 text-amber-600 dark:text-amber-400' :
+      color === 'purple' ? 'bg-purple-100 dark:bg-purple-950/40 text-purple-600 dark:text-purple-400' :
+      'bg-gray-100 dark:bg-gray-800 text-gray-600 dark:text-gray-300'
+    }`}>
+      {icon}
+    </div>
+    <div className="text-3xl sm:text-4xl font-black text-gray-900 dark:text-white mb-1 tracking-tight">{value}</div>
+    <div className="text-[10px] sm:text-xs font-black text-gray-500 dark:text-gray-400 uppercase tracking-widest leading-none">{title}</div>
+    {subtitle && <div className="text-[10px] text-gray-400 dark:text-gray-500 font-semibold mt-2">{subtitle}</div>}
   </div>
 );
 
-const ChartCard = ({ title, data, total }: any) => (
-  <div className="bg-white dark:bg-gray-900 p-10 rounded-[2.5rem] border border-gray-100 dark:border-gray-800 shadow-xl">
-    <h3 className="font-black text-xs uppercase text-gray-400 dark:text-gray-500 mb-8 tracking-[0.2em] flex items-center gap-3">
-       <BarChart3 className="h-4 w-4" /> {title}
-    </h3>
-    <div className="space-y-6">
-      {Object.entries(data).sort((a: any, b: any) => b[1] - a[1]).slice(0, 5).map(([label, count]: any) => (
-        <div key={label} className="group">
-          <div className="flex items-center justify-between mb-2">
-            <span className="text-xs font-black text-gray-700 dark:text-gray-300 uppercase">{label}</span>
-            <span className="text-xs font-black text-red-600">{count}</span>
+const ChartCard = ({ title, data, total, icon }: any) => {
+  const entries = Object.entries(data || {}).sort((a: any, b: any) => b[1] - a[1]);
+  return (
+    <div className="bg-white dark:bg-gray-900 p-6 sm:p-8 rounded-[2.5rem] border border-gray-100 dark:border-gray-800 shadow-xl flex flex-col justify-between">
+      <div>
+        <h3 className="font-black text-xs uppercase text-gray-400 dark:text-gray-500 mb-6 tracking-[0.2em] flex items-center gap-3">
+          {icon || <BarChart3 className="h-4 w-4" />} {title}
+        </h3>
+        {entries.length === 0 ? (
+          <div className="py-12 text-center text-xs font-bold text-gray-400 dark:text-gray-500">
+            Nenhum dado encontrado para os filtros selecionados
           </div>
-          <div className="h-2 bg-gray-100 dark:bg-gray-800 rounded-full overflow-hidden">
-            <div className="h-full bg-red-600 rounded-full transition-all duration-1000" style={{ width: `${(count / total) * 100}%` }}></div>
+        ) : (
+          <div className="space-y-4 max-h-[340px] overflow-y-auto pr-2 custom-scrollbar">
+            {entries.slice(0, 10).map(([label, count]: any) => {
+              const pct = total > 0 ? Math.round((count / total) * 100) : 0;
+              return (
+                <div key={label} className="group">
+                  <div className="flex items-center justify-between mb-1.5 gap-2">
+                    <span className="text-xs font-black text-gray-700 dark:text-gray-300 uppercase truncate" title={label}>
+                      {label}
+                    </span>
+                    <div className="flex items-center gap-2 shrink-0">
+                      <span className="text-xs font-black text-red-600">{count}</span>
+                      <span className="text-[10px] font-bold text-gray-400">({pct}%)</span>
+                    </div>
+                  </div>
+                  <div className="h-2 bg-gray-100 dark:bg-gray-800 rounded-full overflow-hidden">
+                    <div
+                      className="h-full bg-red-600 rounded-full transition-all duration-1000"
+                      style={{ width: `${pct}%` }}
+                    />
+                  </div>
+                </div>
+              );
+            })}
           </div>
+        )}
+      </div>
+      {entries.length > 10 && (
+        <div className="text-[10px] font-bold text-gray-400 dark:text-gray-500 uppercase tracking-wider text-right mt-4 pt-3 border-t border-gray-100 dark:border-gray-800">
+          Exibindo top 10 de {entries.length} registros
         </div>
-      ))}
+      )}
     </div>
-  </div>
-);
+  );
+};
 
 const ConfigCard = ({ title, items, onAdd, onDelete, newItem, setNewItem }: any) => (
   <div className="bg-white dark:bg-gray-900 p-10 rounded-[3rem] border border-gray-100 dark:border-gray-800 shadow-xl flex flex-col h-[500px]">

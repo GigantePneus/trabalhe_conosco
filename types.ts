@@ -15,6 +15,7 @@ export interface ExperienciaProfissional {
 
 export interface Candidato {
   id: string;
+  candidato_id?: string;
   nome: string;
   email: string;
   cpf_mascarado?: string;
@@ -85,6 +86,11 @@ export interface JobLandingContent {
 
 export interface KPIStats {
   total: number;
+  totalCandidatosUnicos?: number;
+  totalCandidaturas?: number;
+  unidadesComCandidaturas?: number;
+  bancoTalentosTotal?: number;
+  porLoja?: Record<string, number>;
   porCidade: Record<string, number>;
   porCargo: Record<string, number>;
   porDia: Record<string, number>;
